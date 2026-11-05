@@ -141,21 +141,13 @@ an independent four-statement fixture contract, rejecting extra statements or
 fields. The per-declaration root test verifies both bucket count and exact
 output keys against the supplied declaration. All routine Make/helper/CI
 initialization uses read-only provider lock files. Deliberate dependency updates
-must be performed separately and both changed lock files reviewed.
+must be performed separately and the affected lock files reviewed.
 
-A manual LocalStack smoke test using the previous account-prefixed bucket
-names — a real `apply`, not `mock_provider` — previously confirmed policy
-structure round-trips through the real AWS provider against emulated APIs: see `docs/verification.md`,
-"LocalStack smoke test." That's stronger than a mock, but it's still not
-the real AWS authorization engine, and it was a one-off manual run, not a
-suite exercised by `make check`. That historical run does not verify the current
-bucket naming contract; current integration evidence is recorded below.
-
-The later repeatable consumer extension now tests the current naming contract
-against LocalStack with payments, customers, and accounting. Baseline/lifecycle/
-recovery/cleanup results and limits are recorded in `docs/verification.md`;
-team usage is in `docs/consumers.md`. The module implementation is shared across
-all three; no Purpose tag or consumer-specific Terraform was added.
+Optional real-provider emulator checks are described in the
+[LocalStack runbook](../../docs/localstack.md).
+[Verification](../../docs/verification.md) records the tested source snapshots
+and remaining gaps; [verification history](../../docs/verification-history.md)
+contains earlier runs and debugging details.
 
 ## Live CI permissions boundary
 

@@ -1,12 +1,8 @@
-# Testing the team repositories
+# Testing the platform and team repositories
 
-Three team repositories consume this platform: **payments**, **customers** and
-**accounting**. Each owns only JSON. This page explains what is checked, where
-each check runs, and how to run it yourself.
-
-No team repository contains Terraform, provider configuration, backend
-configuration, or pipeline implementation. Every check below executes the
-platform's own module and root against the team's declaration.
+Use this guide to run the platform checks and understand how the payments,
+customers, and accounting configurations are tested. Team checks use the
+platform's Terraform module and root against each team's declaration.
 
 ## What a team repository contains
 
@@ -99,8 +95,7 @@ verified on every full platform run.
 
 ## Every make target
 
-These run against the whole platform, not only team repositories — this is
-the full command reference the README links here instead of repeating it.
+Run these targets from the platform checkout.
 
 | Command | Checks | In `make check` |
 | --- | --- | --- |
@@ -116,8 +111,7 @@ the full command reference the README links here instead of repeating it.
 | `make test-consumers` | The three consumer mirrors, all nine environments | ✅ |
 | `make test-localstack` | Real-provider emulator lifecycle; needs Docker + a free Hobby token | — opt-in |
 
-Exact pass/fail counts are in [verification.md](verification.md) rather than
-duplicated here, where they would drift out of sync.
+Executed results and case counts are in [verification.md](verification.md).
 
 **The platform CLI** (`uv run python scripts/team_platform.py <command>`) is
 what these targets call: `validate --file`, `render --file --team-id --config

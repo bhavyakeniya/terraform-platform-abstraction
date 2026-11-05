@@ -158,38 +158,11 @@ by hand (or via `terraform import`) before any further plan is trusted.
 
 ## Offboarding runbook (bonus, manual)
 
-This is the operator's sequence for what "removing a team" means in this
-release — a manual runbook, not automation. For the data-fate options
-(retain, archive, transfer, export-then-destroy, destroy) and when to pick
-each, see [consumers.md](consumers.md#make-an-everyday-change); this
-runbook assumes that decision has already been made.
-[offboarding-procedures.md](offboarding-procedures.md) has the exact
-retain/destroy commands.
+Use [offboarding-procedures.md](offboarding-procedures.md) when retiring a team
+or environment. It owns the ordered preparation, retain/suspend, and destroy
+procedures, including access revocation, version cleanup, and verification.
 
-1. **Detect.** A PR removing an `environments/<env>/` directory (or the
-   whole team repository) is opened. `consumer_matrix` fails the run unless
-   an approved retirement receipt accompanies it, rather than silently
-   treating the deletion as a normal change.
-2. **Decide.** The data owner picks one of the options in
-   [consumers.md](consumers.md#make-an-everyday-change) — never inferred
-   from the PR, never defaulted to destroy. Record which one before proceeding.
-3. **Drain and select state.** Close new deployments, drain in-flight applies,
-   and stop workload writers separately. Verify operator identity, initialize a
-   fresh TF_DATA_DIR with the exact team's backend, and verify its inventory.
-4. **Suspend access.** Apply reviewed privacy changes first, then block new
-   workload role sessions and revoke or wait out existing ones. Record the
-   manual trust exception and keep ordinary applies blocked: they would restore
-   configured trust. Follow the detailed runbook's ordering and checks.
-5. **Act on the decision.** Retain leaves buckets, role, data, and state in place.
-   Destroy requires explicit approval, complete version/delete-marker cleanup,
-   error inspection, a reviewed saved destruction plan, and verified absence.
-   Archive, cross-team transfer, and export first require their own reviewed
-   procedures; this runbook does not execute those migrations. Preserve private
-   state/plan history and the decision record.
-6. **Record.** Keep the manifest/CI run that detected the removal and the
-   final action taken as the audit trail — this release has no dedicated
-   receipt/evidence store, which is explicitly out of scope for this
-   release.
-
-Every step above after step 1 is a manual operator action in this release.
-Nothing in this repository currently automates steps 2–6.
+Offboarding is manual. Record the data owner's decision and completion evidence;
+archive, transfer, and export need separate plans. Follow
+[environment retirement](environments-and-delivery.md#add-or-retire-an-environment)
+to remove CI bindings, preserve backends, and record the retirement receipt.
