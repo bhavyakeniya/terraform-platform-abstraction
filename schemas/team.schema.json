@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.invalid/schemas/team.schema.json",
+  "title": "Team declaration",
+  "type": "object",
+  "required": ["schema_version", "owner", "buckets"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "owner": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._:/=+@-]{0,127}$"
+    },
+    "buckets": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+        "maxLength": 16
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["visibility"],
+        "additionalProperties": false,
+        "properties": {
+          "visibility": {
+            "type": "string",
+            "enum": ["public", "private"]
+          }
+        }
+      }
+    }
+  }
+}
