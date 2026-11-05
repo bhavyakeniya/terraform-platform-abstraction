@@ -1,0 +1,9 @@
+{
+  "required_buckets": [
+    "ledger",
+    "invoices",
+    "reports",
+    "audit-history"
+  ],
+  "allowed_public_buckets": []
+}

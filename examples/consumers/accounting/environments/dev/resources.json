@@ -1,0 +1,19 @@
+{
+  "schema_version": 2,
+  "owner": "accounting@example.invalid",
+  "buckets": {
+    "ledger": {
+      "visibility": "private"
+    },
+    "invoices": {
+      "visibility": "private"
+    },
+    "reports": {
+      "visibility": "private"
+    },
+    "audit-history": {
+      "visibility": "private"
+    }
+  },
+  "environment": "dev"
+}

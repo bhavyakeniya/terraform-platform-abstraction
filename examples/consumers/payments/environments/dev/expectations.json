@@ -1,0 +1,7 @@
+{
+  "required_buckets": [
+    "receipts",
+    "settlements"
+  ],
+  "allowed_public_buckets": []
+}

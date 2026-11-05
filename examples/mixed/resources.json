@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "owner": "example@example.invalid",
+  "buckets": {
+    "reports": { "visibility": "private" },
+    "assets": { "visibility": "public" }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "required_buckets": [
+    "profiles",
+    "exports",
+    "help-assets"
+  ],
+  "allowed_public_buckets": [
+    "help-assets"
+  ]
+}

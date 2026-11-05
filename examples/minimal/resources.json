@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "owner": "platform-team@example.invalid",
+  "buckets": {
+    "data": { "visibility": "private" }
+  }
+}

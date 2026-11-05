@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "owner": "payments@example.invalid",
+  "buckets": {
+    "receipts": {
+      "visibility": "private"
+    },
+    "settlements": {
+      "visibility": "private"
+    }
+  },
+  "environment": "staging"
+}
