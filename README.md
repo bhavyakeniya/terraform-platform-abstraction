@@ -106,58 +106,38 @@ security-scan paths.
 
 ## Running the checks locally
 
-Full checks require Trivy 0.73.0. Checkov and its dependencies are installed
-automatically into an isolated locked environment. See
-[security scanning](docs/security-scanning.md) for setup and scope exceptions.
-
 ```bash
 make check
 ```
 
-Runs, in Makefile order: the Trivy/Checkov security gates and their scanner
-canaries, `terraform fmt -check`, the full Python test suite, the module's
-native `terraform test` suites (contract + security), the root's
-team-independent generic checks (run once, not per team), the backend and CI
-module contracts, both committed examples through the real
-render→mocked-root-test pipeline, the fixture-smoke path, and all nine consumer
-declarations. Everything is credential-free — no AWS account, no
-LocalStack, and nothing reaches the network beyond installing pinned
-dependencies (`uv sync`, the scanner environment) and Terraform's own provider
-download. Exact current case counts live in one place —
-[docs/verification.md](docs/verification.md) — rather than duplicated
-here where they'd drift out of sync; `make check`'s own output is always
-the immediate source of truth. Individual pieces:
+One command. No AWS account, no credentials, no LocalStack. The only network
+access is installing pinned dependencies and Terraform's provider download.
 
-```bash
-make fmt-check         # terraform fmt -check -recursive
-make test-python       # uv run pytest tests/ -q
-make security          # independent Trivy + locked Checkov rules
-make test-security     # real negative scanner canaries
-make test-module       # module contract.tftest.hcl + security.tftest.hcl
-make test-root-generic # root's team-independent checks (output projection, wrong-account) -- run once
-make test-backend      # team-backend and team-ci module contracts
-make check-examples    # render each example, run its declaration-specific check through the real root
-make fixture-smoke     # local mirror of the CI fixture-smoke job
-make test-consumers    # the three consumer mirrors (also part of `make check`)
-make test-localstack   # opt-in real-provider emulator lifecycle; free Hobby token required
-```
+Needs Trivy 0.73.0 on `PATH`; Checkov installs itself into an isolated locked
+environment (see [security scanning](docs/security-scanning.md)).
 
-Routine Terraform initialization uses `-lockfile=readonly` in the Make targets
-and Python helper, including the paths invoked by CI. Tests use the committed
-provider selections; dependency upgrades are separate reviewed changes across
-the Python lock file and all six committed Terraform lock files. Module and root
-inputs have descriptions and reject top-level nulls, except
-`permissions_boundary_arn`, which defaults to `null` so the module stays usable
-without the platform's CI-provisioned boundary.
-The security suite checks the complete attached IAM policy, and each rendered
-declaration check verifies its output bucket count and keys.
+| Command | Checks | In `make check` |
+| --- | --- | --- |
+| `make security` | Trivy + locked Checkov rules | ✅ |
+| `make test-security` | Negative canaries: unsafe configs must fail the scanners | ✅ |
+| `make fmt-check` | `terraform fmt -check -recursive` | ✅ |
+| `make test-python` | Full pytest suite | ✅ |
+| `make test-module` | `team-resources` contract + security, under `mock_provider` | ✅ |
+| `make test-root-generic` | Root checks that don't depend on a team; run once | ✅ |
+| `make test-backend` | `team-backend` and `team-ci` module contracts | ✅ |
+| `make check-examples` | Each example rendered, then planned through the real root | ✅ |
+| `make fixture-smoke` | Local mirror of the CI fixture-smoke job | ✅ |
+| `make test-consumers` | The three consumer mirrors, all nine environments | ✅ |
+| `make test-localstack` | Real-provider emulator lifecycle; needs Docker + a free Hobby token | — opt-in |
 
-CLI commands (`uv run python scripts/team_platform.py <command>`):
-`validate --file`, `render --file --team-id --config --out`,
-`smoke-check --fixtures-dir --config`. `smoke-check` renders ephemeral
-fixtures and runs them through the real root under `mock_provider`; it backs
-the always-run fixture-smoke CI job and is also what `consumer_platform`
-calls per environment.
+Case counts live in [docs/verification.md](docs/verification.md) rather than
+here, where they would drift; `make check`'s own output is always current.
+
+**CLI** (`uv run python scripts/team_platform.py <command>`) —
+`validate --file`, `render --file --team-id --config --out`, and
+`smoke-check --fixtures-dir --config`, which renders ephemeral fixtures through
+the real root under `mock_provider`. It backs the always-run fixture-smoke CI
+job, and `consumer_platform` calls it per environment.
 
 ## Architecture
 
