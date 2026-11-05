@@ -56,6 +56,17 @@ For a consumer checked out under a different directory name, supply its stable
 identity explicitly with `--team-id payments --consumer-dir /path/to/consumer`.
 That override requires exactly one consumer directory.
 
+## Run from GitHub Actions
+
+Add `LOCALSTACK_AUTH_TOKEN` as a secret in the team repository. From its default
+branch, dispatch the infrastructure workflow with `mode=check` and
+`localstack=true`.
+
+Only the emulator job receives the Hobby token; the checks and AWS jobs do not.
+The job starts its own disposable runtime and uploads sanitized evidence JSON,
+without raw plans, state, or tokens. This run needs no AWS account and does not
+activate a paid trial.
+
 ## What happens
 
 The runner validates each declaration and consumer expectations before starting

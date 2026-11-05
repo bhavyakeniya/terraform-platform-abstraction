@@ -147,14 +147,24 @@ implemented `retire` command —
 
 ## Private state recovery
 
-Every real invocation gets a fresh `.runs/<run-id>/<team-id>/` working
-directory and its own `TF_DATA_DIR` — never reused across teams, never
-reused across runs, and locking is never disabled to work around a stuck
-process. If a real apply is interrupted after mutating AWS resources but
-before state persistence completes: preserve whatever local recovery
-artifacts exist, do not retry blindly, and do not push a guessed state
-file — an operator reconciles the real resource inventory against state
-by hand (or via `terraform import`) before any further plan is trusted.
+Live CI uses a fresh temporary deployment directory and `TF_DATA_DIR` for each
+job. Raw plans, state, and provider diagnostics remain on the ephemeral runner;
+only resource addresses and actions appear in public summaries. No raw
+plan/state GitHub artifacts or PR comments are published.
+
+If Terraform writes `errored.tfstate` after a failed state write, the workflow
+refreshes credentials and attempts to upload it to the team's private,
+versioned S3 backend under `recovery/<environment>/<run-id>/<attempt>/` with
+AES256 encryption. A failed upload leaves the run failed. Temporary deployment
+files are removed in an `always()` step.
+
+After any interrupted apply or recovery-upload failure, stop writers and
+reconcile AWS inventory against state before retrying. Preserve available
+recovery artifacts privately; never push a guessed state file. Detailed
+diagnostics require reproducing the failure in an authorized private operator
+workspace. Never force-unlock until all writers have been accounted for, and
+never disable locking to bypass a stuck process. An operator must reconcile or
+import resources before trusting another plan.
 
 ## Offboarding runbook (bonus, manual)
 

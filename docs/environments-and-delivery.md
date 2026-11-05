@@ -217,83 +217,49 @@ changes registry data and bootstrap inputs, never the shared workload module.
 
 ## CI/CD: what actually happens
 
-The generated caller invokes the shared workflow. A team maintains one small
-caller and JSON data; it does not duplicate checkout, authentication, Terraform
-initialization or plan/apply logic. Workflow implementation updates are released
-centrally, and consumers intentionally update the immutable pin through review.
+Teams maintain JSON and a small caller pinned to the shared platform workflow.
+Checkout, authentication, and Terraform execution are implemented centrally;
+teams adopt workflow updates by reviewing and changing that pin.
 
 | Trigger | Behavior |
 | --- | --- |
-| Pull request | Validate every declared environment and its business expectations, then native Terraform mocked-root tests. No AWS credentials or apply. |
-| Push to the default branch | Check **every** configured environment, credential-free. Change selection narrows deployment, not validation, and the generated caller requests `check` for both automatic triggers, so no AWS plan runs without a manual dispatch. |
-| Manual `mode=check` | Credential-free checks; optionally `localstack=true` for Hobby integration, without AWS. |
-| Manual `mode=plan` | Fresh AWS plan for the selected environment. |
-| Manual `mode=apply` | Fresh saved plan and apply of **that exact new plan** in the same job. |
+| Pull request or push to the default branch | Validate every environment and its expectations, then run mocked Terraform tests. No AWS credentials. |
+| Manual `mode=check` | Run the same checks; optionally add `localstack=true` for [emulator integration](localstack.md#run-from-github-actions). |
+| Manual `mode=plan` | Create an AWS plan for the selected environment. |
+| Manual `mode=apply` | Create a fresh saved plan and apply it in the same job. |
 
-The reusable workflow still accepts `mode: plan` from a caller's push trigger;
-the generated caller deliberately does not use it, so that merging a JSON edit
-can never reach AWS without someone dispatching the run.
+### Environment selection
 
-For optional CI emulator integration, add `LOCALSTACK_AUTH_TOKEN` as a consumer
-repository secret and dispatch `mode=check`, `localstack=true` from the default
-branch. Only the guarded emulator job receives the token; it uploads sanitized
-evidence JSON only. Checks and AWS jobs never receive the Hobby token.
+Automatic checks validate **all** configured environments. Manual plan/apply runs
+use the environment chosen in the dispatch. Environments are discovered from
+the team's directories; there is no fixed dev/staging/prod matrix. Removing one
+requires an approved [retirement receipt](#add-or-retire-an-environment).
 
-The current caller names `main` in its push trigger; change that one generated
-line if the consumer uses a different default branch. Both the shared workflow
-and CLI independently reject AWS execution from a non-default branch. GitHub
-must enforce environment branch restrictions before releasing OIDC credentials.
+### Deployment safeguards
 
-**Capability of the reusable workflow.** `scripts/consumer_matrix.py` classifies
-the change: an edit under `environments/dev/` selects dev only, a shared-file
-edit (`team.json`, `Makefile`, `.github/`) selects every configured environment,
-a documentation-only edit selects none, and removing an environment fails closed
-without an approved retirement receipt. That selection drives the `deploy` job's
-matrix, so a dispatched plan or apply touches only the selected environments.
-Environments are discovered dynamically; there is no hardcoded three-environment
-matrix.
+AWS jobs require platform enrollment and the consumer's default branch. The
+generated caller assumes `main`; change its push trigger for another default
+branch. Configure GitHub environment branch restrictions before enabling OIDC.
+Short-lived credentials are scoped per team/environment; see
+[CI identity permissions](../modules/team-ci/README.md).
 
-**What the published callers actually do.** They request `check` for every
-automatic trigger, so a push or pull request produces **no AWS plan at all**.
-The `check` job also validates *every* environment rather than only the selected
-ones — selection narrows deployment, not validation. Selective planning is
-therefore reachable only through a manual `mode=plan` or `mode=apply` dispatch.
+DynamoDB locks protect state. GitHub serializes deployments per repository,
+team, and environment with `cancel-in-progress=false`; pending runs can still
+be superseded. Deletion or replacement also requires `allow-destroy=true`.
+With `force_destroy=false`, populated buckets cannot be silently emptied.
 
-Each deployment job has repository/team/environment concurrency with
-`cancel-in-progress=false`, and Terraform uses DynamoDB locks with a bounded
-wait. An obsolete apply is not cancelled while it is writing state. GitHub
-concurrency is a supplementary queue; Terraform locking is the state authority.
-GitHub may supersede pending jobs; a manual rerun always creates a fresh plan.
+**Plan approval:** apply creates a fresh plan and immediately applies it.
+An earlier plan-only run is advisory. Dispatch authorizes the current reviewed
+default-branch configuration; there is no pause to approve the new plan.
 
-This is a manual-dispatch model: an earlier `plan`-only run is advisory, not
-binding. `apply` always creates its own fresh plan, with no approval pause
-before applying it — dispatching `apply` authorizes the current reviewed
-default-branch configuration, not a specific plan someone read first. Exact
-human approval of one plan would need a separate protected apply job with
-private encrypted plan storage; that does not exist today. Deletion or
-replacement is refused unless the manual apply also sets `allow-destroy=true`.
-Bucket data is still protected by `force_destroy=false`.
+Public summaries contain resource addresses and actions only. Plans, state, and
+provider diagnostics remain private. See [state recovery](operations.md#private-state-recovery)
+for failed writes and emergency-state handling.
 
-Raw Terraform plans, values, state and provider diagnostics stay on the ephemeral
-runner. Only resource addresses and action names enter the public job summary;
-there are no raw plan/state GitHub artifacts or PR comments. If Terraform writes
-`errored.tfstate` after a failed state persistence, the failure path refreshes
-credentials and attempts to preserve that file as a versioned AES256-encrypted
-object under the team bucket’s `recovery/<environment>/<run-id>/<attempt>/`
-prefix. This stays private; it is not uploaded as a public artifact. An upload
-failure remains a failed run: stop writers and reconcile AWS inventory/state
-before retrying. Local temporary deployment files are removed in an `always()` step. Reproduce failures in an authorized
-private operator workspace for detailed diagnostics. Never force-unlock until
-all writers have been accounted for.
-
-CI uses short-lived OIDC credentials. Each CI identity can manage only its
-team/environment bucket prefix, exact state object, exact workload role, its own
-environment recovery prefix, and its two DynamoDB lock/checksum rows. It cannot access another team's backend, modify
-its own identity, pass roles, attach arbitrary managed policies or edit the
-platform boundary. The workload boundary caps the role at same-account S3 data
-operations for its team/environment. A compromised deployment can still alter
-its own bucket policies: protect workflow/module changes and approve public data.
-Neither LocalStack Hobby nor mocked tests proves effective AWS IAM enforcement.
+**Advanced: automatic plans.** Custom callers can request `mode=plan` on push;
+the published callers request `check`. For automatic plans, the change selector
+chooses edited environments, all environments for `team.json`, `Makefile`, or
+`.github/` changes, and none for documentation-only edits. Apply remains manual.
 
 ## Add or retire an environment
 
