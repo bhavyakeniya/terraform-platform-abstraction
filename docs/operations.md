@@ -151,30 +151,28 @@ Every real invocation gets a fresh `.runs/<run-id>/<team-id>/` working
 directory and its own `TF_DATA_DIR` — never reused across teams, never
 reused across runs, and locking is never disabled to work around a stuck
 process. If a real apply is interrupted after mutating AWS resources but
-before state persistence completes, the documented recovery path
-(Section 3.6 step 7) is: preserve whatever local recovery artifacts exist,
-do not retry blindly, and do not push a guessed state file — an operator
-reconciles the real resource inventory against state by hand (or via
-`terraform import`) before any further plan is trusted.
+before state persistence completes: preserve whatever local recovery
+artifacts exist, do not retry blindly, and do not push a guessed state
+file — an operator reconciles the real resource inventory against state
+by hand (or via `terraform import`) before any further plan is trusted.
 
 ## Offboarding runbook (bonus, manual)
 
 This is the operator's sequence for what "removing a team" means in this
-release — a manual runbook, not automation, consistent with B02's scope
-("offboarding — bonus"). For the full set of data-fate options (retain,
-archive, transfer, export-then-destroy, destroy) and when to pick each,
-see [team-lifecycle.md](team-lifecycle.md) — this runbook assumes that
-decision has already been made. [offboarding-procedures.md](offboarding-procedures.md)
-provides retain/destroy procedures and treats archive, cross-team transfer,
-and export as conceptual options requiring separate plans.
+release — a manual runbook, not automation. For the data-fate options
+(retain, archive, transfer, export-then-destroy, destroy) and when to pick
+each, see [consumers.md](consumers.md#make-an-everyday-change); this
+runbook assumes that decision has already been made.
+[offboarding-procedures.md](offboarding-procedures.md) has the exact
+retain/destroy commands.
 
 1. **Detect.** A PR removing an `environments/<env>/` directory (or the
    whole team repository) is opened. `consumer_matrix` fails the run unless
    an approved retirement receipt accompanies it, rather than silently
    treating the deletion as a normal change.
 2. **Decide.** The data owner picks one of the options in
-   `team-lifecycle.md` — never inferred from the PR, never defaulted to
-   destroy. Record which one before proceeding.
+   [consumers.md](consumers.md#make-an-everyday-change) — never inferred
+   from the PR, never defaulted to destroy. Record which one before proceeding.
 3. **Drain and select state.** Close new deployments, drain in-flight applies,
    and stop workload writers separately. Verify operator identity, initialize a
    fresh TF_DATA_DIR with the exact team's backend, and verify its inventory.

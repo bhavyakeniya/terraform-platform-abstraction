@@ -2,20 +2,20 @@
 
 [![CI](https://github.com/bhavyakeniya/terraform-platform-abstraction/actions/workflows/terraform.yml/badge.svg?branch=main&event=push)](https://github.com/bhavyakeniya/terraform-platform-abstraction/actions/workflows/terraform.yml)
 
-A Terraform platform abstraction for a fintech infrastructure-platform team:
-one module provisions one team's S3 buckets and IAM role, one generic root
-runs that module against an isolated backend, and a small Python helper
-plus a GitHub Actions workflow turn a team's one-file declaration into a
-validated, tested change — without the team ever touching Terraform.
+A team that needs AWS resources writes one JSON file — which S3 buckets it
+needs, and whether each one is public or private — and gets a validated,
+tested change, without touching Terraform or designing any CI. The platform
+guarantees every team's resources look the same: same naming, same
+encryption, same least-privilege IAM role, whether it's the first team or the
+three-hundredth.
 
 Each team owns a separate repository with one JSON declaration per environment
 (`dev`, `staging`, `prod`). A platform-owned reusable workflow does the rest.
 
-CI runs and passes on GitHub for all four repositories. AWS deployment is
-deliberately disabled in the environment catalogs, so automatic runs validate
-without credentials and plan/apply stay behind a manual dispatch. No real team
-data exists and nothing has been deployed to AWS.
-Start with the [environment and delivery guide](docs/environments-and-delivery.md).
+CI runs and passes on GitHub for all four repositories below. AWS deployment
+is deliberately disabled for now, so automatic runs validate without
+credentials and plan/apply stay behind a manual dispatch. No real team data
+exists and nothing has been deployed to AWS.
 
 ## Repositories
 
@@ -26,31 +26,12 @@ Start with the [environment and delivery guide](docs/environments-and-delivery.m
 | [team-customers](https://github.com/bhavyakeniya/team-customers) | Example consuming team — JSON declarations only |
 | [team-accounting](https://github.com/bhavyakeniya/team-accounting) | Example consuming team — JSON declarations only |
 
-Each team repository holds 11 files: six JSON declarations and expectations, a
-`team.json`, a README, a `.gitignore`, a two-target Makefile, and a thin
-workflow that calls this platform's reusable workflow at a pinned commit. No
-Terraform, no provider or backend configuration, no pipeline logic. Their CI checks out this
-repository, renders their declarations, and runs them through the real module
-under `mock_provider` — proving the abstraction works across repository
-boundaries, not just inside this one. See
-[docs/team-repo-tests.md](docs/team-repo-tests.md).
-
-## Where to find things
-
-| Document | Read it for |
-| --- | --- |
-| This file | Setup, architecture, security model, CI/CD, walkthrough outline |
-| [docs/environments-and-delivery.md](docs/environments-and-delivery.md) | Current onboarding, environments, S3/DynamoDB state, shared plan/apply, migration and retirement |
-| [docs/security-scanning.md](docs/security-scanning.md) | Blocking Trivy/Checkov gates, pinned tools, explicit exceptions and negative tests |
-| [docs/assumptions.md](docs/assumptions.md) | Assumptions, design justifications, limitations, and questions before deployment |
-| [docs/consumers.md](docs/consumers.md) | Three independent consumer projects, local commands, shared CI, changes, and emulator evidence |
-| [docs/verification.md](docs/verification.md) | Exact test counts and results, requirement-by-requirement evidence, what's proven vs. blocked and why |
-| [modules/team-resources/README.md](modules/team-resources/README.md) | The module's inputs/outputs, naming formulas, full security contract, how to test it standalone |
-| [docs/team-lifecycle.md](docs/team-lifecycle.md) | The full onboarding walkthrough and every offboarding option (not just deletion) |
-| [docs/offboarding-procedures.md](docs/offboarding-procedures.md) | Manual retain/destroy procedures; conceptual archive, transfer, and export options |
-| [docs/operations.md](docs/operations.md) | Operator-facing: the real plan/apply procedure, backend/public-control prerequisites, drain-before-revoke, state recovery |
-| [docs/localstack.md](docs/localstack.md) | Running the isolated consumer integration and reading its evidence |
-| [docs/team-repo-tests.md](docs/team-repo-tests.md) | How the three team repositories are checked, and how to run those checks |
+A team repository has no Terraform, no provider or backend configuration, and
+no pipeline logic — just JSON and a thin workflow that calls this platform's
+reusable workflow at a pinned commit. Their CI checks out this repository and
+runs their declarations through the real module under `mock_provider`,
+proving the platform works across repository boundaries, not just inside
+this one.
 
 ## Setup
 
@@ -59,10 +40,9 @@ uv sync --locked
 ```
 
 Pinned versions: Python 3.13.15 (`.python-version`), Terraform 1.17.1
-(`.terraform-version`, resolved AWS provider 6.71.0 — see the committed
-`.terraform.lock.hcl` files), uv 0.12.3+. Terraform itself is not installed
-by `uv sync`; fetch the pinned release directly if you don't already have
-it:
+(`.terraform-version`, resolved AWS provider 6.71.0), uv 0.12.3+. Terraform
+itself is not installed by `uv sync`; fetch the pinned release directly if
+you don't already have it:
 
 ```bash
 mkdir -p .local/bin
@@ -72,8 +52,7 @@ unzip -o -q /tmp/terraform.zip -d .local/bin && chmod +x .local/bin/terraform
 ```
 
 `make check` finds `.local/bin/terraform` automatically if present, falling
-back to `terraform` on `PATH` otherwise (the exact scheme CI uses — see
-`.github/workflows/terraform.yml`).
+back to `terraform` on `PATH` otherwise — the same scheme CI uses.
 
 ## The declaration a team writes
 
@@ -84,8 +63,8 @@ uv run python -m scripts.onboard --team-id logistics \
   --owner logistics@example.invalid --destination ../logistics
 ```
 
-The scaffold includes dev/staging/prod, expectations, local commands and a thin
-shared-workflow caller template. Edit `environments/dev/resources.json`:
+The scaffold includes dev/staging/prod, expectations, and a thin
+shared-workflow caller. Edit `environments/dev/resources.json`:
 
 ```json
 {
@@ -99,12 +78,10 @@ shared-workflow caller template. Edit `environments/dev/resources.json`:
 }
 ```
 
-Update that environment's `expectations.json` to match its business requirements
-and explicitly permitted public keys. Teams supply no Terraform, backend choices,
-provider settings or deployment scripts. See [the delivery guide](docs/environments-and-delivery.md)
-for activation and the small platform-controlled registration. `examples/minimal`
-and `examples/mixed` remain as declaration fixtures for the fixture-smoke and
-security-scan paths.
+That's the whole interface: no Terraform, no backend choices, no provider
+settings, no deployment scripts. See [using the platform](docs/consumers.md)
+for everyday changes and [the delivery guide](docs/environments-and-delivery.md)
+for activation.
 
 ## Running the checks locally
 
@@ -114,32 +91,12 @@ make check
 
 One command. No AWS account, no credentials, no LocalStack. The only network
 access is installing pinned dependencies and Terraform's provider download.
+It runs the full test suite, the security scanners (Trivy + Checkov), and
+every example declaration through the real module.
 
-Needs Trivy 0.73.0 on `PATH`; Checkov installs itself into an isolated locked
-environment (see [security scanning](docs/security-scanning.md)).
-
-| Command | Checks | In `make check` |
-| --- | --- | --- |
-| `make security` | Trivy + locked Checkov rules | ✅ |
-| `make test-security` | Negative canaries: unsafe configs must fail the scanners | ✅ |
-| `make fmt-check` | `terraform fmt -check -recursive` | ✅ |
-| `make test-python` | Full pytest suite | ✅ |
-| `make test-module` | `team-resources` contract + security, under `mock_provider` | ✅ |
-| `make test-root-generic` | Root checks that don't depend on a team; run once | ✅ |
-| `make test-backend` | `team-backend` and `team-ci` module contracts | ✅ |
-| `make check-examples` | Each example rendered, then planned through the real root | ✅ |
-| `make fixture-smoke` | Local mirror of the CI fixture-smoke job | ✅ |
-| `make test-consumers` | The three consumer mirrors, all nine environments | ✅ |
-| `make test-localstack` | Real-provider emulator lifecycle; needs Docker + a free Hobby token | — opt-in |
-
-Case counts live in [docs/verification.md](docs/verification.md) rather than
-here, where they would drift; `make check`'s own output is always current.
-
-**CLI** (`uv run python scripts/team_platform.py <command>`) —
-`validate --file`, `render --file --team-id --config --out`, and
-`smoke-check --fixtures-dir --config`, which renders ephemeral fixtures through
-the real root under `mock_provider`. It backs the always-run fixture-smoke CI
-job, and `consumer_platform` calls it per environment.
+The full command reference and what each one checks:
+[docs/team-repo-tests.md](docs/team-repo-tests.md#every-make-target).
+Exact pass/fail counts: [docs/verification.md](docs/verification.md).
 
 ## Architecture
 
@@ -176,26 +133,11 @@ from one registry with no platform change.
 | Backend bucket + lock table | `sumup--tfstate--<account>--<team>` | |
 
 `--` is an unambiguous separator because no identifier may contain it, so two
-different `(team, key)` splits can never produce the same name.
-
-**Only buckets carry the `sumup--` prefix.** S3 is a single global namespace, so
-the prefix reduces the chance of colliding with an unrelated account. IAM is
-account-scoped, so a role gains nothing from a company prefix; roles are grouped
-by their IAM path instead (`/team-platform/runtime/<env>/<team>/`), which is what
-an SCP or permissions boundary matches on. The role name still repeats
-environment and team because
-[AWS requires friendly names to be unique within an account](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html)
-and a path does not make two identically named roles distinct.
-
-- **No account ID in workload bucket names.** It stays in state keys, account
-  guards and IAM resource-owner checks. Names are unique within the configured
-  environment/team/key set, not across S3's global namespace — a collision
-  fails rather than importing or renaming anything.
-- **Max generated length 51 characters**, 12 below S3's limit. Spare characters
-  do not make a deployed bucket renameable; that is a reviewed migration.
-- **SSE-S3, not customer-managed KMS.** SSE-KMS reads require signed requests,
-  which would break the required anonymous public-read case. A deliberate v1
-  scope choice — see [docs/assumptions.md](docs/assumptions.md).
+different `(team, key)` splits can never produce the same name. Only buckets
+carry the `sumup--` prefix — S3 is a global namespace, IAM is not. Full
+reasoning, reserved-name rules, and length limits:
+[modules/team-resources/README.md](modules/team-resources/README.md) and
+[docs/assumptions.md](docs/assumptions.md).
 
 ### State isolation
 
@@ -223,16 +165,10 @@ encryption, versioning, TLS-only access, `force_destroy = false`, platform tags.
 | `block_public_policy` / `restrict_public_buckets` | `true` | `false` |
 | Anonymous access | none | `s3:GetObject` on current objects only |
 
-The one workload role per team gets exactly four inline statements:
-
-1. **Allow** list/locate on its own buckets
-2. **Allow** get/put/delete on its own objects
-3. **Deny** everything else, by `NotResource`
-4. **Deny** even those allowed actions if the resource's account differs from
-   the team's registered account (`s3:ResourceAccount` — a readable bucket name
-   is not ownership proof)
-
-Full contract and every test: [modules/team-resources/README.md](modules/team-resources/README.md).
+The one workload role per team can only reach that team's own buckets and
+objects, nothing else, and loses that access entirely if the resource's AWS
+account ever differs from the team's registered account. Every statement and
+its test: [modules/team-resources/README.md](modules/team-resources/README.md).
 
 ### CI
 
@@ -241,30 +177,41 @@ Full contract and every test: [modules/team-resources/README.md](modules/team-re
 | `terraform.yml` (this repo) | PR, push, dispatch | `security` (Trivy/Checkov), `checks` (full local suite), `fixture-smoke` (always, no AWS) |
 | `team-infrastructure.yml` (reusable) | called by each team repo | `check` (credential-free, automatic), `deploy` (manual dispatch only), `localstack` (opt-in) |
 
-No job in **`terraform.yml`** — this repository's own validation workflow —
-holds cloud credentials, runs `apply`, or takes more than `contents: read`.
-`team-infrastructure.yml` is different by design: it also lives here, and its
-`deploy` job requests `id-token: write`, assumes a short-lived OIDC role and
-runs `apply`. That job never fires automatically; it requires a manual dispatch
-from the default branch. What this proves versus what it does not:
-[docs/verification.md](docs/verification.md).
+No job in `terraform.yml` holds cloud credentials, runs `apply`, or takes
+more than `contents: read`. `team-infrastructure.yml`'s `deploy` job is
+different by design — it assumes a short-lived OIDC role and runs `apply` —
+but only on a manual dispatch, never automatically. Full trigger-by-trigger
+behavior: [the delivery guide](docs/environments-and-delivery.md#cicd-what-actually-happens).
+What all of this proves versus what it does not: [docs/verification.md](docs/verification.md).
 
-## Scope boundaries
+## Current status
 
-**Published and CI-verified:** the module, generic root, declaration contract,
-consumer change-selection pipeline, tests, environment catalogs, backend and CI
-bootstrap modules, the shared plan/apply workflow, and the LocalStack harness.
-All four repositories run their checks on GitHub.
+Published and CI-verified: the module, generic root, declaration contract,
+consumer change-selection pipeline, tests, environment catalogs, backend and
+CI bootstrap modules, the shared plan/apply workflow, and the LocalStack
+harness. All four repositories run their checks on GitHub.
 
-**Not verified:** anything requiring AWS. No account is enrolled, OIDC trust and
-protected environments are not configured, and no plan or apply has run against
-real infrastructure. The three teams are demonstrations, not production
-onboarding. `docs/verification.md` separates what is proven from what is not.
+Not verified: anything requiring AWS. No account is enrolled, OIDC trust and
+protected environments are not configured, and no plan or apply has run
+against real infrastructure. The three teams are demonstrations, AWS
+deployment remains disabled, and [docs/verification.md](docs/verification.md)
+separates what is proven from what is not.
 
-## Second pass
+## Documentation
 
-Onboarding a real team, enabling authorized plan/review/apply, and
-real-provider acceptance are deliberately deferred — see
-[docs/operations.md](docs/operations.md) and
-[docs/verification.md](docs/verification.md). Nothing in this release implies
-that authorization.
+**Using the platform**
+- [docs/consumers.md](docs/consumers.md) — onboard a team, make everyday changes, offboarding options
+- [docs/environments-and-delivery.md](docs/environments-and-delivery.md) — onboarding, environments, state, CI triggers, migration
+- [docs/team-repo-tests.md](docs/team-repo-tests.md) — every check, every `make` target, how to run them
+- [docs/localstack.md](docs/localstack.md) — running the real-provider emulator suite
+
+**Understanding the design**
+- [modules/team-resources/README.md](modules/team-resources/README.md) — inputs/outputs, naming formulas, full security contract
+- [docs/assumptions.md](docs/assumptions.md) — design justifications, limitations, open questions
+- [docs/verification.md](docs/verification.md) — current evidence: what's proven, what's blocked, why
+- [docs/verification-history.md](docs/verification-history.md) — dated run records and narrative evidence
+
+**Operating it**
+- [docs/operations.md](docs/operations.md) — plan/apply procedure, state recovery, drain-before-revoke
+- [docs/offboarding-procedures.md](docs/offboarding-procedures.md) — retain/destroy commands
+- [docs/security-scanning.md](docs/security-scanning.md) — Trivy/Checkov gates, pinned tools, exceptions

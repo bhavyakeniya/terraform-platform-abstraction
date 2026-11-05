@@ -97,6 +97,35 @@ CONSUMERS="../payments ../customers ../accounting" make test-consumers
 `make test-consumers` is part of `make check`, so the team contracts are
 verified on every full platform run.
 
+## Every make target
+
+These run against the whole platform, not only team repositories — this is
+the full command reference the README links here instead of repeating it.
+
+| Command | Checks | In `make check` |
+| --- | --- | --- |
+| `make security` | Trivy + locked Checkov rules | ✅ |
+| `make test-security` | Tests that confirm unsafe configurations are rejected | ✅ |
+| `make fmt-check` | `terraform fmt -check -recursive` | ✅ |
+| `make test-python` | Full pytest suite | ✅ |
+| `make test-module` | `team-resources` contract + security, under `mock_provider` | ✅ |
+| `make test-root-generic` | Root checks that don't depend on a team; run once | ✅ |
+| `make test-backend` | `team-backend` and `team-ci` module contracts | ✅ |
+| `make check-examples` | Each example rendered, then planned through the real root | ✅ |
+| `make fixture-smoke` | Local mirror of the CI fixture-smoke job | ✅ |
+| `make test-consumers` | The three consumer mirrors, all nine environments | ✅ |
+| `make test-localstack` | Real-provider emulator lifecycle; needs Docker + a free Hobby token | — opt-in |
+
+Exact pass/fail counts are in [verification.md](verification.md) rather than
+duplicated here, where they would drift out of sync.
+
+**The platform CLI** (`uv run python scripts/team_platform.py <command>`) is
+what these targets call: `validate --file`, `render --file --team-id --config
+--out`, and `smoke-check --fixtures-dir --config`. `smoke-check` renders
+ephemeral fixtures and runs them through the real root under `mock_provider`
+— it backs the always-run fixture-smoke CI job, and `consumer_platform` calls
+it per environment for team repositories.
+
 ## Platform-side tests about team repositories
 
 `tests/test_consumers.py` tests the consumer mechanism itself rather than any

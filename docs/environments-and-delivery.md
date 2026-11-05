@@ -265,15 +265,14 @@ wait. An obsolete apply is not cancelled while it is writing state. GitHub
 concurrency is a supplementary queue; Terraform locking is the state authority.
 GitHub may supersede pending jobs; a manual rerun always creates a fresh plan.
 
-This adopts `~/repositories/phoenix-gcp-terraform`’s documented manual-dispatch
-model, adapted from GCP/GCS to AWS/S3/DynamoDB. **An earlier
-plan-only run is advisory: apply creates a new plan, and there is no approval
-pause between that new plan and applying it.** Dispatch authorizes the current
-reviewed default-branch configuration. If exact human approval of a particular
-plan is required, use a separate protected apply job and private encrypted plan
-storage as a future change; do not pretend this workflow supplies that guarantee.
-Deletion or replacement is refused unless the manual apply also sets
-`allow-destroy=true`. Bucket data is still protected by `force_destroy=false`.
+This is a manual-dispatch model: an earlier `plan`-only run is advisory, not
+binding. `apply` always creates its own fresh plan, with no approval pause
+before applying it — dispatching `apply` authorizes the current reviewed
+default-branch configuration, not a specific plan someone read first. Exact
+human approval of one plan would need a separate protected apply job with
+private encrypted plan storage; that does not exist today. Deletion or
+replacement is refused unless the manual apply also sets `allow-destroy=true`.
+Bucket data is still protected by `force_destroy=false`.
 
 Raw Terraform plans, values, state and provider diagnostics stay on the ephemeral
 runner. Only resource addresses and action names enter the public job summary;
@@ -379,9 +378,9 @@ selection mechanics. Neither proves AWS capacity.
 
 ## Verification boundaries
 
-`make check` now also runs the [independent Trivy/Checkov security gate](security-scanning.md)
-and its real negative canaries. It includes original contracts plus environment/onboarding/deployment
-safety tests and native backend/CI-module contracts. `make test-consumers` runs
+`make check` runs the [Trivy/Checkov security gate](security-scanning.md) and
+its tests that confirm unsafe configurations are rejected, alongside the
+environment/onboarding/deployment and native backend/CI-module contracts. `make test-consumers` runs
 all nine example declarations through the root without cloud credentials.
 `make test-localstack` uses actual Terraform/provider code and an isolated free
 Hobby container for S3/DynamoDB-backed state, contention and workload lifecycle.

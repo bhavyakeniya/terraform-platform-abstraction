@@ -1,9 +1,10 @@
 # Manual offboarding: retain or destroy
 
-[team-lifecycle.md](team-lifecycle.md) explains the team's choices. This
-runbook provides manual retain/destroy procedures using the existing generic
-root. Archive, cross-team transfer, and export are conceptual options below,
-not executable migration procedures. No additional Terraform stack is required.
+[consumers.md](consumers.md#make-an-everyday-change) explains the team's
+choices. This runbook provides manual retain/destroy procedures using the
+existing generic root. Archive, cross-team transfer, and export are
+conceptual options below, not executable migration procedures. No additional
+Terraform stack is required.
 
 **Status:** documented for a future authorized AWS deployment; not executed or
 validated against AWS. Nothing in this repository automates offboarding beyond

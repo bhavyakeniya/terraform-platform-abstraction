@@ -1,9 +1,8 @@
 # Independent Terraform security checks
 
-`make check` now includes blocking Trivy and Checkov scans and real negative
-scanner tests, alongside the existing native Terraform and Python tests.
-This closes the missing-static-scanner gap; it is not a compliance certification
-or proof of effective AWS IAM authorization.
+CI runs Trivy and Checkov before anything else in `make check`, alongside
+tests that confirm unsafe configurations are rejected. This is not a
+compliance certification or proof of effective AWS IAM authorization.
 
 ## Run locally
 
@@ -54,10 +53,9 @@ Its synthetic account guard makes the composition unsuitable for real AWS apply.
 Running scanners only against input-free reusable modules left visibility/for_each
 branches unresolved; this composition supplies those values without deployment.
 
-The resource controls now use `for_each = var.buckets` and explicit bucket-key
-references. The keys/addresses are unchanged. This equivalent, simpler wiring
-also lets Checkov associate versioning and access controls with their buckets;
-no versioning/private-access waivers were added to hide graph-resolution errors.
+The module's `for_each = var.buckets` resources let Checkov associate
+versioning and access controls with their specific bucket, rather than losing
+that link when scanning modules without concrete inputs.
 
 The main platform workflow has a required `security` job, and its checks job
 requires that job. The reusable team workflow runs the same security composite
