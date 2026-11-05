@@ -6,16 +6,30 @@ runs that module against an isolated backend, and a small Python helper
 plus a GitHub Actions workflow turn a team's one-file declaration into a
 validated, tested change — without the team ever touching Terraform.
 
-Teams now use independent projects with `environments/dev`, `staging` and `prod`.
-Each environment declares its own JSON config. A platform-owned reusable workflow
-runs checks and plans; an explicit manual dispatch can create and apply a fresh
-saved plan. Each team/account gets a private, versioned, encrypted S3 backend and
-DynamoDB lock table, provisioned by the platform operator.
+Each team owns a separate repository with one JSON declaration per environment
+(`dev`, `staging`, `prod`). A platform-owned reusable workflow does the rest.
 
-Everything remains local: AWS deployment is disabled in the fixture catalogs,
-workflow activation requires a real published platform SHA, and live GitHub/AWS
-acceptance is pending. No real team data or AWS deployment has been created.
-Start with [environment and delivery guide](docs/environments-and-delivery.md).
+CI runs and passes on GitHub for all four repositories. AWS deployment is
+deliberately disabled in the environment catalogs, so automatic runs validate
+without credentials and plan/apply stay behind a manual dispatch. No real team
+data exists and nothing has been deployed to AWS.
+Start with the [environment and delivery guide](docs/environments-and-delivery.md).
+
+## Repositories
+
+| Repository | Role |
+| --- | --- |
+| [terraform-platform-abstraction](https://github.com/bhavyakeniya/terraform-platform-abstraction) | This repository: the module, generic root, helper, CI and docs |
+| [team-payments](https://github.com/bhavyakeniya/team-payments) | Example consuming team — JSON declarations only |
+| [team-customers](https://github.com/bhavyakeniya/team-customers) | Example consuming team — JSON declarations only |
+| [team-accounting](https://github.com/bhavyakeniya/team-accounting) | Example consuming team — JSON declarations only |
+
+Each team repository holds nothing but JSON and a six-line workflow that calls
+this platform's reusable workflow at a pinned commit. Their CI checks out this
+repository, renders their declarations, and runs them through the real module
+under `mock_provider` — proving the abstraction works across repository
+boundaries, not just inside this one. See
+[docs/team-repo-tests.md](docs/team-repo-tests.md).
 
 ## Where to find things
 
@@ -140,96 +154,98 @@ calls per environment.
 ## Architecture
 
 ```
-consumer/environments/<env>/resources.json  <- team-owned declaration
-        |
-        v
-consumer_platform.py / environments.py     <- strict validation and platform context
-  validate -> derive_context -> render_inputs -> inputs.tfvars.json / backend.hcl.json
-        |
-        v
-stacks/team/  (generic root, one module invocation per run)
-        |
-        v
-modules/team-resources/  (one team's buckets + one IAM role)
+team repo:  environments/<env>/resources.json      <- the only thing a team owns
+                      |
+platform:   consumer_platform.py + environments.py <- validate, derive context, render
+                      |
+                      v
+            stacks/team/            <- generic root, one module call per run
+                      |
+                      v
+            modules/team-resources/ <- one team's buckets + one IAM role
 ```
 
-**One module, one root, no per-team code.** `modules/team-resources`
-provisions exactly one team's resources; `stacks/team` configures the
-provider and invokes that module once. Scaling from 1 to 300+ teams means
-running the same root repeatedly with different rendered variables — never
-editing the module, the root, or the workflow. `scripts/team_platform.py`'s
-`scripts/consumer_matrix.py` proves this on the consumer side by classifying
-Git changes within a team repository: an edit under `environments/<env>/`
-selects exactly that environment, a shared-file edit selects all of them, and
-removing an environment fails closed without a signed retirement receipt
-(`tests/test_environments.py`). The same file's 300-team case generates 300
-distinct backends and 900 CI bindings from one registry with no platform code
-change.
+**One module, one root, no per-team code.** Going from 1 team to 300+ means
+running the same root again with different rendered variables. The module, the
+root and the workflow never change.
 
-**State isolation.** Each team/account has its own bucket and DynamoDB table,
-both named `sumup--tfstate--<account-id>--<team-id>`. State objects use
-`workloads/<account>/<environment>/teams/<team-id>/terraform.tfstate`.
-The backend module enables encryption, versioning, private access and deletion
-safeguards. Every live invocation has a fresh `TF_DATA_DIR`; DynamoDB handles
-locking and GitHub does not cancel in-flight deployments. Scoped CI identities
-and mandatory workload boundaries are provisioned separately from workloads.
-DynamoDB locking is deprecated upstream, retained here as explicitly requested;
-CLI upgrades require backend tests and migration review.
+`scripts/consumer_matrix.py` decides what runs: an edit under
+`environments/<env>/` selects exactly that environment, a shared-file edit
+selects all of them, and a removed environment fails closed unless an approved
+retirement receipt accompanies it. The 300-team case in
+`tests/test_environments.py` generates 300 distinct backends and 900 CI bindings
+from one registry with no platform change.
 
-**Naming.** `sumup--<environment>--<team-id>--<bucket-key>` for
-buckets, `tfp--<environment>--<team-id>--s3` for the role. The double-hyphen
-separator is unambiguous because no identifier component may contain `--`
-itself (enforced by the identifier regex), so two different `(team_id,
-bucket_key)` splits can never collide into the same string within an environment.
-For example: `sumup--dev--payments--reports`.
+### Naming
 
-- **Account IDs are absent from workload bucket names.** They remain in state keys,
-  account guards, and IAM resource-owner checks. Names are unique within the
-  configured environment/team/key set, not guaranteed globally: the same
-  identifiers in another account or region would request the same name, and
-  an unrelated AWS account may already own it. An unavailable name fails; do
-  not silently import it or invent a suffix. This is a deliberate limitation
-  of the single-target scope.
-- **Maximum generated length is 51 characters**, leaving 12 below S3's
-  63-character limit. Changing names after deployment requires a reviewed
-  migration; spare characters do not make an existing bucket renameable.
-- **SSE-S3 (not customer-managed KMS) is the deliberate v1 default**,
-  because SSE-KMS object reads require signed requests and would break the
-  assignment's anonymous-public-read requirement. Private production data
-  is a separate scope decision gated on asking about classification/key
-  ownership first. See Section 3.4, "Encryption decision."
+| Thing | Format | Example |
+| --- | --- | --- |
+| Bucket | `sumup--<env>--<team>--<key>` | `sumup--dev--payments--reports` |
+| Workload role | `tfp--<env>--<team>--s3` | `tfp--dev--payments--s3` |
+| State object | `workloads/<account>/<env>/teams/<team>/terraform.tfstate` | |
+| Backend bucket + lock table | `sumup--tfstate--<account>--<team>` | |
 
-**Security model.** Every bucket: BucketOwnerEnforced ownership, SSE-S3
-encryption, versioning, TLS-only access (anonymous HTTP denied
-unconditionally), `force_destroy = false`, platform tags. Private buckets
-keep all four S3 public-access-block flags `true`; public buckets relax
-only `block_public_policy`/`restrict_public_buckets` and grant exactly
-anonymous `s3:GetObject` on current objects — never listing, writing,
-deleting, or historical versions. The one workload IAM role per team gets
-an exact four-statement inline policy: allow list/locate on its own
-buckets, allow get/put/delete on its own objects, deny everything else by
-`NotResource`, and deny even its own allowed actions if the resource's AWS
-account ever differs from the team's registered account (`s3:ResourceAccount`
-condition — readable names are not ownership proof). Full detail and every
-test: `modules/team-resources/README.md`.
+`--` is an unambiguous separator because no identifier may contain it, so two
+different `(team, key)` splits can never produce the same name.
 
-**Platform CI.** `.github/workflows/terraform.yml` runs on PR, push, and manual
-dispatch with three jobs: `security` (Trivy/Checkov gates), `checks` (the full
-local suite), and `fixture-smoke`, which runs unconditionally on every event to
-exercise the render-and-mocked-root path independently of any real team. Per-team
-change selection is not a platform-repository concern — teams own separate
-repositories, so that selection happens in
-`.github/workflows/team-infrastructure.yml` via `scripts/consumer_matrix.py`.
-The platform workflow's live-runner result remains unverified until publication.
-No job holds cloud credentials,
-runs `apply`, or writes with more than `contents: read`. See
-`docs/verification.md` for what's proven by this (readiness) versus what
-it is explicitly not (an AWS-authorization or full-scale-correctness
-proof).
+- **No account ID in workload bucket names.** It stays in state keys, account
+  guards and IAM resource-owner checks. Names are unique within the configured
+  environment/team/key set, not across S3's global namespace — a collision
+  fails rather than importing or renaming anything.
+- **Max generated length 51 characters**, 12 below S3's limit. Spare characters
+  do not make a deployed bucket renameable; that is a reviewed migration.
+- **SSE-S3, not customer-managed KMS.** SSE-KMS reads require signed requests,
+  which would break the required anonymous public-read case. A deliberate v1
+  scope choice — see [docs/assumptions.md](docs/assumptions.md).
 
-**Team delivery.** `.github/workflows/team-infrastructure.yml` supplies environment
-checks, post-merge plans and manually dispatched fresh-plan/apply. It uses scoped
-OIDC identities and non-cancelling concurrency. See the [delivery guide](docs/environments-and-delivery.md).
+### State isolation
+
+One bucket and one DynamoDB lock table per **team/account**, shared only across
+that team's environments in that account.
+
+| Property | Value |
+| --- | --- |
+| Encryption / versioning / private access | enabled on the backend bucket |
+| Locking | DynamoDB, one row per environment state |
+| Per-run isolation | fresh `TF_DATA_DIR`; GitHub never cancels in-flight runs |
+| CI identity | scoped OIDC role and workload permissions boundary, provisioned separately |
+
+DynamoDB locking is deprecated upstream and retained here deliberately; a CLI
+upgrade needs backend tests and a migration review.
+
+### Security model
+
+Every bucket, public or private: BucketOwnerEnforced ownership, SSE-S3
+encryption, versioning, TLS-only access, `force_destroy = false`, platform tags.
+
+| Setting | Private | Public |
+| --- | --- | --- |
+| `block_public_acls` / `ignore_public_acls` | `true` | `true` |
+| `block_public_policy` / `restrict_public_buckets` | `true` | `false` |
+| Anonymous access | none | `s3:GetObject` on current objects only |
+
+The one workload role per team gets exactly four inline statements:
+
+1. **Allow** list/locate on its own buckets
+2. **Allow** get/put/delete on its own objects
+3. **Deny** everything else, by `NotResource`
+4. **Deny** even those allowed actions if the resource's account differs from
+   the team's registered account (`s3:ResourceAccount` — a readable bucket name
+   is not ownership proof)
+
+Full contract and every test: [modules/team-resources/README.md](modules/team-resources/README.md).
+
+### CI
+
+| Workflow | Trigger | Jobs |
+| --- | --- | --- |
+| `terraform.yml` (this repo) | PR, push, dispatch | `security` (Trivy/Checkov), `checks` (full local suite), `fixture-smoke` (always, no AWS) |
+| `team-infrastructure.yml` (reusable) | called by each team repo | `check` (credential-free, automatic), `deploy` (manual dispatch only), `localstack` (opt-in) |
+
+No job in this repository holds cloud credentials, runs `apply`, or takes more
+than `contents: read`. Team deploys use short-lived OIDC credentials and are
+never triggered automatically. What this proves versus what it does not:
+[docs/verification.md](docs/verification.md).
 
 ## Scope boundaries
 
