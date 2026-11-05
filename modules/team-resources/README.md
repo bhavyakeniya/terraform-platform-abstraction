@@ -1,158 +1,114 @@
 # team-resources
 
-Provisions exactly one team's S3 buckets and one workload IAM role. Every
-input that describes the team is required and has no default. Invoked once per team by
-`stacks/team` (never `for_each` across teams at this layer); scaling to
-300+ teams means running the root repeatedly, never changing this module.
+Creates S3 buckets and one workload IAM role for a single team/environment.
+The shared [team root](../../stacks/team/main.tf) calls this module separately
+for each configuration. Backend storage and CI identities are provisioned by
+other modules.
 
 ## Inputs
 
-| Input | Type | Supplied by |
-| --- | --- | --- |
-| `team_id` | `string` | Validated team identifier from the team's `team.json`, or an explicit fixture ID |
-| `environment` | `string` | Platform configuration |
-| `account_id` | `string`, exactly 12 digits | Platform configuration |
-| `owner` | `string` | Validated declaration |
-| `buckets` | `map(object({ visibility = string }))` | Validated declaration |
-| `trusted_principal_arn` | `string` | Platform configuration; exact same-account IAM role ARN, no wildcard/account-root trust |
-| `permissions_boundary_arn` | `string`, optional (default `null`) | Platform configuration; when set it must be exactly the boundary for this account/team/environment |
+| Input | Type and requirements |
+| --- | --- |
+| `team_id` | `string`; stable team ID, at most 16 characters |
+| `environment` | `string`; platform-selected environment, at most 8 characters |
+| `account_id` | `string`; target commercial AWS account, exactly 12 digits |
+| `owner` | `string`; tag-safe contact metadata, at most 128 characters |
+| `buckets` | `map(object({ visibility = string }))`; at least one entry, each explicitly `public` or `private` |
+| `trusted_principal_arn` | `string`; exact existing role in the same account, without a role path, wildcard, or account-root principal |
+| `permissions_boundary_arn` | `string`, default `null`; when supplied, must match this account/team/environment's platform boundary |
 
-Every input has a description and `nullable = false`: callers must supply a
-non-null value. Nulls inside the bucket map still depend on the nested
-type/value contract; top-level nullability is not recursive.
-
-`permissions_boundary_arn` is the one input with a default. It defaults to
-`null` so a direct module consumer can use the module without the platform's
-CI-provisioned boundary; the delivery path always supplies it, and supplying
-another team's boundary is rejected.
-
-Every input is re-validated here with `variable { validation {...} }` blocks
-— blocking, not a warning-only `check` block — even though Python already
-enforces the same rules, because this module must behave correctly for any
-direct consumer, not only the one Python helper that happens to exist today.
+All inputs except `permissions_boundary_arn` are required and reject null.
+The module validates inputs independently of the Python helper; see
+[variables.tf](variables.tf) for the full constraints.
 
 ## Outputs
 
-`role_arn` (string), `bucket_names` (map), `bucket_arns` (map), `visibility`
-(map).
+| Output | Value |
+| --- | --- |
+| `role_arn` | Workload role ARN |
+| `bucket_names` | Bucket names keyed by declaration key |
+| `bucket_arns` | Bucket ARNs keyed by declaration key |
+| `visibility` | Declared visibility keyed by declaration key |
 
 ## Naming
 
-```
+```text
 bucket:    sumup--<environment>--<team-id>--<bucket-key>
 role:      <environment>--<team-id>--s3
 role path: /team-platform/runtime/<environment>/<team-id>/
 ```
 
-Buckets carry the prefix because S3 is a global namespace; roles don't,
-because IAM is account-scoped and the path above already groups them. See
-`docs/assumptions.md` (A07-A09) for the full reasoning.
+Environment, team ID, and bucket keys start with a lowercase letter and allow
+lowercase letters, digits, and single hyphens. Bucket keys are at most 16
+characters; generated bucket names reach at most 51. Completed names are checked
+against S3 length and reserved-name restrictions.
 
-Completed names are validated — length and the AWS reserved
-prefix/suffix list (`-s3alias`, `--ol-s3`, `--x-s3`, `--table-s3`, `-an`,
-`xn--`, `sthree-`, `amzn-s3-demo-`, `.mrap`, IP-address form) — in a
-blocking `variable "buckets" { validation {...} }` block, before any
-resource is planned. Generated names reach at most 51 characters, leaving 12
-below S3's 63-character limit. Account IDs stay in execution/security context
-and state keys, not bucket names. The same environment/team/key in another
-account or region produces the same name; unrelated owners can also occupy
-it. This single-target design fails on collision without automatic takeover or
-renaming. See the top-level README.
+Bucket names contain no account ID. The same environment/team/key in another
+account or region requests the same globally unique name; a collision fails
+without automatic import, renaming, or takeover. See
+[naming decisions A07–A09](../../docs/assumptions.md#naming-and-resource-identity-choices)
+for the reasoning.
 
-`for_each = var.buckets` with stable addresses (`aws_s3_bucket.this["reports"]`):
-reordering declared keys, editing `owner`, or adding a bucket preserves
-every existing resource's identity. Renaming a team or a bucket key is a
-migration, never an ordinary edit — see `tests/contract.tftest.hcl`'s
-`reorder_keys_no_change`/`owner_change_no_replacement`/
-`add_bucket_preserves_existing` runs, which prove this by checking that a
-bucket's ARN doesn't change across a non-replacing apply (a mock-provider
-computed attribute only changes on actual replacement).
-
-S3 bucket ARNs have no account/region component
-(`arn:aws:s3:::<name>`), so every ARN used in policy construction is
-derived from the deterministic `local.bucket_names` map, never from the
-`aws_s3_bucket` resources' own computed `.arn` attribute. This keeps the
-whole policy — and the oversized-policy precondition below — evaluable at
-plan time, before any bucket exists, rather than deferred to apply.
+Bucket keys are stable Terraform resource addresses. Reordering keys, changing
+the owner, or adding a bucket preserves existing identities. Changing team,
+environment, or bucket identifiers requires migration review.
 
 ## Security
 
-**Buckets** (`buckets.tf`): BucketOwnerEnforced ownership, SSE-S3/AES256
-default encryption, versioning enabled, `force_destroy = false`, platform
-tags (`Team`, `Environment`, `Owner`, `ManagedBy`). One composed bucket
-policy per bucket, created only after ownership/public-access controls
-(`depends_on`), no ACL resources anywhere.
+Every bucket has ownership enforcement (`BucketOwnerEnforced`), SSE-S3/AES256
+encryption, versioning, and a policy denying insecure transport. Tags are
+`Team`, `Environment`, `Owner`, and `ManagedBy`. With `force_destroy=false`,
+Terraform cannot automatically empty a populated bucket for deletion.
 
-| | Private | Public |
+| Setting | Private | Public |
 | --- | --- | --- |
-| `block_public_acls` / `ignore_public_acls` | both `true` | both `true` |
-| `block_public_policy` / `restrict_public_buckets` | both `true` | both `false` |
-| Anonymous access | none | `s3:GetObject` on current objects only |
+| `block_public_acls` / `ignore_public_acls` | Both `true` | Both `true` |
+| `block_public_policy` / `restrict_public_buckets` | Both `true` | Both `false` |
+| Anonymous access | None | `s3:GetObject` on current objects only |
 
-The bucket policy always denies insecure transport
-(`aws:SecureTransport = false`). A public bucket's anonymous grant targets
-`<bucket-arn>/*` only — never the bucket ARN itself, so there is no
-anonymous listing, and never any action besides `GetObject`, so there is
-no anonymous write/delete/historical-version access.
+Public access grants no listing, writes, deletion, or historical-version reads.
+Account and organization controls must also permit public policies; see
+[public-control prerequisites](../../docs/operations.md#public-control-prerequisites).
 
-**IAM role** (`iam.tf`): exactly one role, trusting only
-`trusted_principal_arn` (no account-root, no wildcard). One inline policy,
-built with `jsonencode` from the deterministic ARNs above — never a mocked
-`aws_iam_policy_document` data source, so the generated JSON is directly
-inspectable in both tests and real plans:
+The workload role trusts only `trusted_principal_arn`. Its inline policy has four
+statements:
 
-1. `Allow` — `s3:ListBucket`, `s3:GetBucketLocation` on the team's bucket ARNs.
-2. `Allow` — `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` on the team's object ARNs.
-3. `Deny` — `s3:*` on `NotResource` = everything outside the owned set (including another team's public bucket, even via a legitimately signed request).
-4. `Deny` — the same allowed actions, if the resource's AWS account ever differs from this team's `account_id` (`s3:ResourceAccount` condition). Bucket names are not ownership proof; keep the account check independently of naming. Per-action condition-key support should be re-checked against the pinned provider/AWS release before a real deployment.
+1. Allow `s3:ListBucket` and `s3:GetBucketLocation` on its declared buckets.
+2. Allow `s3:GetObject`, `s3:PutObject`, and `s3:DeleteObject` on their objects.
+3. Deny `s3:*` outside those bucket/object ARNs using `NotResource`.
+4. Deny the allowed actions when `s3:ResourceAccount` differs from `account_id`.
 
-No IAM administration, no bucket-policy administration, no backend access,
-no deployment role, no permissions-boundary infrastructure — those are
-privileged platform/bootstrap concerns outside this module's scope.
+The policy grants no IAM administration, bucket-policy administration, or backend
+access. ARNs are derived from bucket names so the inline-policy size guard can
+run during planning. Policies over 10,240 characters are rejected; see
+[iam.tf](iam.tf) for policy construction and the precondition.
 
-**Oversized-policy guard**: AWS's IAM role inline-policy aggregate quota is
-10,240 characters, whitespace excluded (verified against the live AWS IAM
-quotas page, not assumed). A `lifecycle { precondition {...} }` on the
-role-policy resource checks the generated policy's length before apply and
-fails with a clear message rather than an opaque AWS API error — exercised
-by `tests/security.tftest.hcl`'s `rejects_oversized_inline_policy` with 35
-maximum-length bucket keys.
+### Live CI permissions boundary
+
+Direct consumers may omit `permissions_boundary_arn`. Live CI always supplies
+`arn:aws:iam::<account-id>:policy/sumup-boundary--<environment>--<team-id>`.
+The CI role cannot create an unbounded workload role or remove/change its
+boundary. Boundary provisioning and deployment permissions belong to the
+[CI identity module](../team-ci/README.md).
 
 ## Testing
+
+From this directory, using the pinned Terraform version:
 
 ```bash
 terraform init -backend=false -lockfile=readonly
 terraform validate
-terraform test -filter=tests/contract.tftest.hcl   # T01, T05, essential input-validation failures
-terraform test -filter=tests/security.tftest.hcl   # T02-T04, T06 (oversized), T08 (full reserved-suffix sweep)
+terraform test -filter=tests/contract.tftest.hcl
+terraform test -filter=tests/security.tftest.hcl
 ```
 
-Both suites use `mock_provider "aws" {}` — no AWS credentials, no network
-calls beyond the provider plugin download. They assert against the actual
-generated resource attributes and `jsonencode()` policy JSON, never a
-Python reconstruction of what the policy "should" look like. This proves
-policy *structure* is correct; it does not prove AWS will enforce that
-policy the way its evaluation engine does in practice — that requires the
-AWS-sandbox acceptance suite described in `docs/verification.md`, which
-remains blocked pending account access (a separate gate from LocalStack).
+Both suites mock AWS and need no credentials. They check resource counts, stable
+identities, input validation, bucket controls, exact trust and permissions
+policies, reserved names, and the policy-size guard. The whole-policy assertion
+rejects unexpected statements or fields.
 
-The security suite also compares the entire attached workload policy against
-an independent four-statement fixture contract, rejecting extra statements or
-fields. The per-declaration root test verifies both bucket count and exact
-output keys against the supplied declaration. All routine Make/helper/CI
-initialization uses read-only provider lock files. Deliberate dependency updates
-must be performed separately and the affected lock files reviewed.
-
-Optional real-provider emulator checks are described in the
-[LocalStack runbook](../../docs/localstack.md).
-[Verification](../../docs/verification.md) records the tested source snapshots
-and remaining gaps; [verification history](../../docs/verification-history.md)
-contains earlier runs and debugging details.
-
-## Live CI permissions boundary
-
-`permissions_boundary_arn` is optional only for legacy/direct local consumption.
-The live platform renderer always supplies the exact platform-managed
-`sumup-boundary--<environment>--<team-id>` policy ARN. CI cannot create an
-unbounded workload role or remove/change that boundary. Backend and CI identities
-are separate modules; see [delivery](../../docs/environments-and-delivery.md).
+Mocks verify configuration and policy construction; effective AWS authorization
+still requires sandbox acceptance. See [verification](../../docs/verification.md)
+for results and tested snapshots, and the [LocalStack runbook](../../docs/localstack.md)
+for optional provider integration. Deliberate provider upgrades are separate
+reviewed changes to the affected lock files.
