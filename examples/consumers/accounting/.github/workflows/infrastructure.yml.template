@@ -34,7 +34,10 @@ jobs:
       platform-repository: PLATFORM_REPOSITORY
       platform-ref: PLATFORM_REF
       environment: ${{ inputs.environment || '' }}
-      mode: ${{ inputs.mode || 'plan' }}
+      # Automatic runs (push, pull_request) stay credential-free: 'check'
+      # validates every changed environment without AWS. Plan and apply are
+      # deliberately manual -- dispatch this workflow and choose the mode.
+      mode: ${{ inputs.mode || 'check' }}
       allow-destroy: ${{ inputs.allow-destroy || false }}
       localstack: ${{ inputs.localstack || false }}
     secrets:
