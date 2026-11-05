@@ -1,219 +1,157 @@
 # Teams, environments, state and delivery
 
-Teams own JSON. The platform owns Terraform, backend provisioning, AWS identity
-rules, validation, and the plan/apply implementation. A team does not fork
-Terraform or write its own deployment scripts.
+Teams manage environment-specific JSON. The platform manages Terraform,
+backends, identities, and the shared deployment workflow. This guide covers
+platform enrollment and operations; start with [the team guide](consumers.md)
+for everyday configuration changes.
 
-The checked-in AWS accounts are **fixtures**, and `deployment_enabled` is false.
-The platform and the three team repositories are published and their
-credential-free checks run on GitHub. No real AWS infrastructure has been
-provisioned: OIDC/AWS acceptance still requires a real account, registered
-identities and protected environments.
+The repositories are public and their credential-free CI runs on GitHub.
+Checked-in AWS accounts are fixtures with `deployment_enabled=false`; no real
+AWS infrastructure has been provisioned. See [verification](verification.md)
+for evidence and activation prerequisites.
 
 ## What lives where
 
-```text
-terraform_platform_abstraction/
-  config/environments/{dev,staging,prod}.json  # account/region, deployment enablement
-  config/teams/<team>.json                   # platform-approved repo and identities
-  modules/team-resources/                    # workload S3 buckets and S3-only role
-  modules/team-backend/                      # private state bucket and DynamoDB table
-  modules/team-ci/                           # scoped OIDC CI role and workload boundary
-  stacks/team/                              # one team/environment per invocation
-  stacks/backends/                          # privileged platform-operated bootstrap
-  .github/workflows/team-infrastructure.yml # shared workflow, maintained once
-  scripts/onboard.py                         # creates a team project, not cloud resources
+| Platform path | Purpose |
+| --- | --- |
+| [config/environments/](../config/environments/) | Account, region, and deployment enablement per environment |
+| [config/teams/](../config/teams/) | Approved repositories and workload/OIDC identities |
+| [stacks/backends/](../stacks/backends/) | Operator-run backend and CI-identity bootstrap |
+| [stacks/team/](../stacks/team/) | Workload root, run separately per team/environment |
+| [Shared workflow](../.github/workflows/team-infrastructure.yml) | Checks, plan, and apply |
 
-payments/                                   # separate team project/repository
-  team.json                                 # {"team_id":"payments"}
-  environments/
-    dev/{resources.json,expectations.json}
-    staging/{resources.json,expectations.json}
-    prod/{resources.json,expectations.json}
-  .github/workflows/infrastructure.yml       # small generated workflow caller
-  Makefile                                  # generated check/localstack entry points
-```
-
-`customers` and `accounting` have the same structure. Environment configurations
-are independent: teams can declare different buckets or visibility in each one.
-`examples/minimal` and `examples/mixed` remain as low-level declaration
-fixtures for the fixture-smoke and security-scan paths; all consumers use the
-v2 structure.
-
-A consumer declaration is explicit and closed:
-
-```json
-{
-  "schema_version": 2,
-  "environment": "dev",
-  "owner": "payments@example.invalid",
-  "buckets": {
-    "receipts": {"visibility": "private"},
-    "settlements": {"visibility": "private"}
-  }
-}
-```
-
-Put it in `environments/dev/resources.json`. The folder, JSON environment and
-platform catalog must agree. No account, region, backend, role trust, endpoint or
-Terraform source can be supplied in this file. Bucket visibility has no default.
-The adjacent expectations file contains `required_buckets` and
-`allowed_public_buckets`: business regression tests, not an authorization system.
-
-Workload names remain `sumup--dev--payments--receipts`. They contain no account
-number. Names still share S3's global namespace: a collision fails; there is no
-silent import, takeover, suffix or truncation.
+Teams keep their ID in `team.json` and declarations and expectations under
+`environments/<env>/`. The directory, JSON environment, and platform catalog must
+agree. Visibility is required for every bucket. Consumer JSON cannot select
+accounts, backends, trust, endpoints, or executable Terraform; expectations are
+business tests, not deployment authorization.
 
 ## State belongs to a team
 
-One bucket and one lock table per **team/account**, shared only across that team's
-environments in that account:
+Each team/account has one private state bucket and one DynamoDB lock table.
+Its environments use separate state objects and lock keys:
 
-| Item | Convention / example |
+| Item | Convention |
 | --- | --- |
-| State bucket | `sumup--tfstate--<account-id>--<team-id>` |
-| DynamoDB table | Same name as the team's state bucket |
+| State bucket and lock table | `sumup--tfstate--<account-id>--<team-id>` |
 | State key | `workloads/<account-id>/<environment>/teams/<team-id>/terraform.tfstate` |
-| Example dev key | `workloads/123456789012/dev/teams/payments/terraform.tfstate` |
-| Example prod key | `workloads/123456789012/prod/teams/payments/terraform.tfstate` |
 | CI role | `sumup-ci--<environment>--<team-id>` |
 
-The state-bucket name is at most 46 characters. The account component makes the
-private backend destination deterministic across accounts. Account IDs are
-identifiers, not secrets; their inclusion in these globally visible backend names
-is deliberate and is separate from the account-free public workload names.
+The account ID makes backend names deterministic across accounts. These names
+remain globally visible; account IDs are identifiers, not secrets. Workload
+bucket names omit the account ID.
 
-The bucket has versioning, default SSE-S3/AES256 encryption, ownership enforcement,
-all four public-access blocks, a TLS-deny policy, `force_destroy=false`, and
-Terraform deletion prevention. The lock table uses on-demand billing, string
-partition key `LockID`, encryption, point-in-time recovery, deletion protection
-and Terraform deletion prevention. Version history is retained; there is no
-automatic state-version expiry that might remove a recovery point.
+- **Bucket:** versioning, SSE-S3/AES256 encryption, ownership enforcement, all
+  public access blocked, TLS required, `force_destroy=false`, and Terraform
+  deletion prevention. State versions do not expire automatically.
+- **Lock table:** on-demand billing, `LockID` string key, encryption,
+  point-in-time recovery, and AWS/Terraform deletion prevention.
+- **Execution:** a fresh `TF_DATA_DIR` per job and the `default` workspace.
+  A payments/dev lock does not block payments/prod or customers/dev.
 
-Different environments use different S3 objects and DynamoDB lock keys. A held
-payments/dev lock must block payments/dev while allowing payments/prod and
-customers/dev to proceed. CI uses one fresh `TF_DATA_DIR` per job. Terraform
-workspaces do not define isolation here; live commands always use `default`.
+See the [backend module](../modules/team-backend/README.md) for implementation
+and [A12](assumptions.md#a12-encryption-choice) for the encryption decision.
 
-SSE-S3 satisfies the requested at-rest encryption with no key administration.
-A policy requiring customer-managed KMS keys would need a separate key policy,
-backend/workload permission design and recovery tests; this implementation does
-not claim KMS customer-managed encryption.
-
-**DynamoDB is a deliberate requested compatibility choice.** HashiCorp deprecates
-DynamoDB backend locking and may remove it in a future minor release. Terraform
-is pinned to 1.17.1. Do not upgrade the CLI without running backend contention
-checks and reviewing release notes. A future migration should drain writers,
-enable dual locking during a coordinated rollout, then move every writer to S3
-lockfiles before retiring the table. Never mix independent S3-only and
-DynamoDB-only writers on the same state. See [Terraform's S3 backend documentation](https://developer.hashicorp.com/terraform/language/backend/s3).
+DynamoDB locking is retained as requested, despite its upstream deprecation.
+Before upgrading Terraform, review release notes and rerun contention tests.
+A future S3-lockfile migration must drain writers, use dual locking during
+transition, and move every writer before retiring DynamoDB. Never mix independent
+S3-only and DynamoDB-only writers. See [Terraform's S3 backend documentation](https://developer.hashicorp.com/terraform/language/backend/s3).
 
 ## Onboard a team locally
 
-From the platform checkout:
+Use [the scaffold and local-check instructions](consumers.md#onboard-a-new-team).
+The generator creates dev/staging/prod declarations, expectations, a Makefile,
+and a workflow template. It creates no GitHub repositories or AWS resources and
+refuses to overwrite an existing project. Its private `data` bucket is an example
+to edit alongside the expectations file.
 
-```bash
-uv run python -m scripts.onboard \
-  --team-id logistics --owner logistics@example.invalid \
-  --destination ../logistics
-```
+To generate an active GitHub caller, also supply
+`--platform-repository bhavyakeniya/terraform-platform-abstraction` and
+`--platform-ref '<reviewed-40-character-SHA>'`. For an existing template, replace
+`PLATFORM_REPOSITORY` and `PLATFORM_REF`, then rename
+`infrastructure.yml.template` to `infrastructure.yml`. The workflow reference and
+platform checkout must use the same immutable SHA; branches and tags are rejected.
 
-This generates dev/staging/prod configs, regression expectations, Makefile and
-workflow template. It refuses to overwrite an existing project. It makes no Git,
-GitHub or AWS changes. The default `data` bucket is an editable private example,
-not an assumption about the team's actual requirements.
+### Register the account and team
 
-```bash
-cd ../logistics
-make check
-make localstack  # Docker, AWS CLI and the user's free Hobby token required
-```
+Before AWS enrollment, confirm the authorized account/region, repository/default
+branch, public-data policy, and existing workload role for each environment.
+Verify the actual GitHub OIDC subject, including any subject customization;
+do not infer it from the repository name. All identities below are examples.
 
-Once a real platform repository and release exist, supply both
-`--platform-repository <owner/repository>` and `--platform-ref <40-character-SHA>`
-when generating a new project. That produces a runnable workflow caller with
-matching immutable pins. For existing local demos, replace the two placeholders
-in `infrastructure.yml.template`, then rename it to `infrastructure.yml`. Keep the caller's workflow reference and checkout
-reference identical. A branch or tag is rejected as a platform checkout pin.
-Nothing in this task performs that publication or activation.
-
-The platform administrator performs the privileged AWS enrollment once:
-
-1. Confirm the real account, region, public-bucket policy, existing workload
-   principal, repository owner/name, default branch and actual GitHub OIDC subject.
-   Do not guess a subject: GitHub subject customization can change its format.
-2. Configure one existing GitHub OIDC provider per AWS account. Protect each
-   GitHub environment to allow the consumer default branch only; protect that
-   branch with review rules. Configure required reviewers where available.
-3. Add the platform-owned team registration below and set its catalog's real
-   account/region, keeping `deployment_enabled=false` during bootstrap.
-4. Render bootstrap inputs from that registration and apply `stacks/backends`
-   as an operator. This provisions each team's bucket/table plus one CI role and
-   protected workload boundary per environment. Then explicitly enable AWS
-   deployment, review/release a platform SHA, and update the generated caller pin.
-5. Run a plan-only default-branch dispatch, then an explicitly authorized apply
-   dispatch and no-change plan in an AWS sandbox. Verify IAM denials in AWS.
-
-Register the team first using the registration shape below. Then render all
-registered teams in the selected account into one bootstrap var file:
-
-```bash
-uv run python -m scripts.bootstrap_inputs --account-id '<actual-account-id>' \
-  --out .runs/bootstrap/inputs.tfvars.json
-```
-
-Review the generated file. In a protected operator workspace, use pinned
-Terraform with `init -lockfile=readonly`, `plan -var-file=<absolute-generated-file>
--out=<private-saved-plan>`, review, then `apply <private-saved-plan>` against
-`stacks/backends`. Rendering itself makes no AWS calls. Bootstrap is a privileged
-operator action, not an ordinary team workflow. No parallel hand-maintained list
-of teams/CI identities is required.
-
-Example generated bootstrap input, **replace all example identities before use**:
+Set `config/environments/dev.json`, keeping deployment disabled during bootstrap:
 
 ```json
 {
   "account_id": "123456789012",
   "region": "eu-central-1",
-  "team_ids": ["payments"],
-  "ci_bindings": {
-    "payments--dev": {
-      "team_id": "payments",
-      "environment": "dev",
-      "oidc_subject": "repo:YOUR-ACCOUNT/payments:environment:dev"
-    }
-  }
+  "deployment_enabled": false
 }
 ```
 
-Add a binding for each environment. The OIDC provider must already exist.
-`stacks/backends` uses local state initially to avoid a circular dependency.
-Bootstrap state contains privileged IAM configuration: operate in a restricted,
-encrypted workspace, back it up, and migrate it to an independently managed,
-private platform backend before shared operation. Never store bootstrap state
-inside a team's backend or check it into Git. Normal team CI never runs this root.
-
-A platform registration at `config/teams/payments.json` has this shape:
+Add `config/teams/payments.json`:
 
 ```json
 {
-  "repository": "YOUR-ACCOUNT/payments",
+  "repository": "YOUR-ACCOUNT/team-payments",
   "environments": {
     "dev": {
-      "oidc_subject": "repo:YOUR-ACCOUNT/payments:environment:dev",
+      "oidc_subject": "repo:YOUR-ACCOUNT/team-payments:environment:dev",
       "trusted_principal_arn": "arn:aws:iam::123456789012:role/payments-dev-app"
     }
   }
 }
 ```
 
-The runtime principal must already exist. Keep it distinct per team/environment.
-The existing module accepts exact same-account role ARNs without role paths.
-Deployment checks bind the GitHub caller repository to this registration before
-requesting credentials. Unknown teams/environments, fixture accounts, disabled
-catalog entries and mismatched OIDC repository/environment subjects fail closed. Execution-role
-ARNs are derived; teams cannot select a deployment identity. Enrollment
-changes registry data and bootstrap inputs, never the shared workload module.
+Register each environment the team will use. Workload principals must already
+exist, be distinct per team/environment, and be same-account role ARNs without
+role paths. Deployment validates the caller repository and registration before
+authentication; CI role ARNs are derived rather than supplied by teams.
+
+### Bootstrap backends and CI identities
+
+An operator must configure the account's GitHub OIDC provider first. Use the
+pinned Terraform version and verify the authenticated account before initializing.
+In a restricted, encrypted platform checkout dedicated to that account, render
+inputs from the registrations and prepare a saved bootstrap plan:
+
+```bash
+uv run python -m scripts.bootstrap_inputs --account-id '<actual-account-id>' \
+  --out .runs/bootstrap/inputs.tfvars.json
+
+BOOTSTRAP_INPUTS="$PWD/.runs/bootstrap/inputs.tfvars.json"
+BOOTSTRAP_PLAN="$PWD/.runs/bootstrap/bootstrap.tfplan"
+terraform -chdir=stacks/backends init -lockfile=readonly
+terraform -chdir=stacks/backends plan \
+  -var-file="$BOOTSTRAP_INPUTS" -out="$BOOTSTRAP_PLAN"
+terraform -chdir=stacks/backends show "$BOOTSTRAP_PLAN"
+```
+
+Review the generated inputs and plan privately. After explicit approval, apply
+that saved plan:
+
+```bash
+terraform -chdir=stacks/backends apply "$BOOTSTRAP_PLAN"
+```
+
+This creates the team bucket/table and each environment's CI role and workload
+boundary. Rendering makes no AWS calls; team workflows never run this bootstrap.
+
+Bootstrap state starts locally to avoid a circular dependency. Back it up and
+migrate it to an independently managed private platform backend before shared
+operation. Never commit it or store it in a team's backend.
+
+### Enable AWS delivery
+
+Protect the consumer default branch and each GitHub environment. Restrict
+environment access to that branch and configure required reviewers where
+available. Then enable the catalog entry, release a reviewed platform SHA, and
+update the consumer's matching workflow and checkout pins.
+
+In an authorized sandbox, dispatch plan, then apply, then a no-change plan.
+Verify effective permissions, public/private access, TLS, locking, and recovery
+before production use; see [verification boundaries](#verification-boundaries).
 
 ## CI/CD: what actually happens
 
@@ -263,118 +201,101 @@ chooses edited environments, all environments for `team.json`, `Makefile`, or
 
 ## Add or retire an environment
 
-To add `qa`, the platform adds `config/environments/qa.json` with the same three
-catalog fields. A team adds `environments/qa/resources.json` with
-`"environment":"qa"` plus expectations. Configure its protected GitHub environment,
-bootstrap CI binding and platform team registration before enabling AWS. A team
-may use any nonempty subset of registered environments; dev/staging/prod are the
-scaffold defaults, not a fixed enum. Names follow the existing lowercase
-identifier rule and maximum eight characters.
+### Add
 
-For one account, keep backend region consistent across its catalog entries: a
-team has one account-level bucket/table pair. Separate accounts get separate
-pairs. Changing a live account or backend region is a migration, not a JSON
-metadata edit. Workload bucket names still require distinct environment/team/key
-identities across accounts because S3's global namespace is shared.
+1. Add `config/environments/qa.json` with the catalog's three fields.
+2. Add `environments/qa/resources.json` with `"environment":"qa"` and its
+   expectations to the team repository.
+3. Register its workload/OIDC identities, configure the protected GitHub
+   environment, and bootstrap the CI binding before enabling AWS delivery.
 
-Removal is deliberate:
+Teams may use any nonempty subset of catalog environments. Names use the
+lowercase identifier rules and are at most eight characters. All catalogs for
+one account must share its backend region; another account gets separate backend
+resources. Changing a live account or backend region requires migration.
+Workload names must also remain globally unique across accounts.
 
-1. Stop new deployments and drain all writers for that team/environment.
-2. Follow [offboarding-procedures.md](offboarding-procedures.md) for retained or
-   destroyed resources, selecting the exact environment/backend. Retain the
-   bucket/table and version history. Preserve a recoverable copy of the state.
-3. Confirm inventory/state and record the owner's decision and operator approval.
-   Remove/revoke that environment's CI binding through the platform operator,
-   after in-flight sessions and recovery have been handled.
-4. If this retires the team's last environment in an account, preserve its
-   backend inventory in the platform registration before removing that binding:
-   `"retained_backends":[{"account_id":"123456789012","region":"eu-central-1"}]`.
-   The bootstrap renderer retains those bucket/table instances while removing
-   the retired CI role/boundary. This avoids a later unrelated onboarding plan
-   trying to delete retained state infrastructure. An empty environments map is
-   allowed only with explicitly retained backends.
-5. Remove the consumer environment directory and add
-   `retired-environments/<environment>.json` in the same reviewed change:
+### Retire
+
+1. Close deployment admission, drain applies and workload writers, and follow
+   [offboarding](offboarding-procedures.md) for the exact team/environment.
+   Preserve inventory, the owner's decision, state, and backend version history.
+2. Before removing the team's last binding in an account, add this field to its
+   registration so bootstrap retains the bucket and table:
 
    ```json
-   {"team_id":"payments","environment":"qa","completed":true,
-    "ticket":"CHG-123","approved_by":"platform-owner"}
+   {
+     "retained_backends": [
+       {"account_id": "123456789012", "region": "eu-central-1"}
+     ]
+   }
    ```
 
-   This is an auditable manual receipt, not automated proof that AWS is empty.
-   Discovery rejects a removed environment without it; deleting JSON never
-   triggers an automatic destroy. Retain decisions can leave resources/state.
-6. Remove a platform catalog only after every team has retired that environment
-   and all registrations/writers have been reconciled. Do not remove team backend
-   resources while any environment or required recovery history remains.
+   An empty `environments` map is allowed only with retained backends.
+3. Remove/revoke the CI binding after sessions and recovery have been handled.
+   Review the bootstrap removal plan, including retained-role boundary
+   dependencies, before applying it.
+4. Remove the consumer directory and add `retired-environments/qa.json` in the
+   same reviewed change:
+
+   ```json
+   {
+     "team_id": "payments",
+     "environment": "qa",
+     "completed": true,
+     "ticket": "CHG-123",
+     "approved_by": "platform-owner"
+   }
+   ```
+
+   The receipt records manual approval; it does not prove AWS resources are gone.
+   Missing receipts stop change discovery. Deleting JSON never triggers destroy.
+5. Remove a platform catalog only after every team has retired that environment
+   and all registrations and writers are reconciled. Preserve backends while
+   any environment or required recovery history remains.
 
 ## Moving existing state
 
-Current demo state is disposable emulator state. For an existing live deployment,
-backend migration must be an explicit operator change before adopting this path:
-freeze and drain writers; back up and inspect the old state/lineage; create the
-team backend; initialize the **old** backend in a fresh private directory; switch
-to the rendered new bucket/key/table with `terraform init -migrate-state`; inspect
-the copied state and run a no-change plan; then enable the new workflow. Update
-permissions and retire old writers together. `-reconfigure` does not copy state.
-Do not apply from an empty new backend and accidentally recreate existing assets.
-Migration is a manual procedure here, not something onboarding silently performs.
+Live backend migration is a separate operator change:
+
+1. Freeze and drain writers; back up the old state and inspect its inventory
+   and lineage.
+2. Create the team backend and initialize the **old** backend in a fresh private
+   directory.
+3. Switch to the rendered destination with `terraform init -migrate-state`.
+   `-reconfigure` does not copy state.
+4. Inspect the copied state and require a no-change plan before enabling the new
+   workflow. Update permissions and retire old writers together.
+
+Never apply from an empty new backend to adopt existing assets. Onboarding does
+not migrate state automatically; current demo state is disposable emulator state.
 
 ## Shared resources and scale
 
-The shared resources in this release are the platform module/root, workflow,
-validation/tests, account-level OIDC provider, and platform-managed backend/CI
-modules. Teams supply no Terraform implementation. This does not introduce
-cross-team access to workload data or permit reading another team's entire state.
-If a future team needs a shared VPC/KMS key, expose a small platform-owned,
-read-only identifier contract after requirements are known; do not use access to
-another team's state as a general discovery mechanism.
+Teams share platform code, workflows, tests, and operator-managed identity/backend
+modules. They do not gain access to another team's data or state. Future shared
+VPC/KMS resources should expose approved read-only identifiers rather than entire
+state files.
 
-Three hundred teams consume the same versioned workflow and module. Each workflow
-runs at most three environment jobs concurrently, with state/lock isolation per
-team/environment. Account IAM-role/S3 quotas, GitHub runner concurrency and AWS
-API throttling need capacity checks before a real 300-team rollout. In one
-account, 300 teams × 3 environments × (one CI role + one workload role) requires
-1,800 roles, plus existing roles. AWS's default is 1,000 roles/account, adjustable
-to 10,000: request enough quota and headroom, or use separate environment accounts
-before rollout. See [AWS IAM quotas](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html).
-The new bootstrap-rendering test covers 300 teams / 900 CI bindings; the existing
-The 300-team registry case proves configuration scale and per-environment
-selection mechanics. Neither proves AWS capacity.
+Each workflow runs at most three environment jobs concurrently. In one account,
+300 teams × three environments × two roles (CI and workload) requires **1,800
+roles**, plus existing roles. Check [IAM quotas](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html),
+S3 capacity, runner concurrency, and AWS API throttling before rollout.
+
+The 300-team/900-binding test proves configuration scale; it does not establish
+AWS capacity or production run times.
 
 ## Verification boundaries
 
-`make check` runs the [Trivy/Checkov security gate](security-scanning.md) and
-its tests that confirm unsafe configurations are rejected, alongside the
-environment/onboarding/deployment and native backend/CI-module contracts. `make test-consumers` runs
-all nine example declarations through the root without cloud credentials.
-`make test-localstack` uses actual Terraform/provider code and an isolated free
-Hobby container for S3/DynamoDB-backed state, contention and workload lifecycle.
-It does not activate paid features or touch the pre-existing emulator.
+[Testing](team-repo-tests.md) covers credential-free checks; [LocalStack](localstack.md)
+covers emulator integration. [Verification](verification.md) records the source
+snapshots tested and outstanding AWS acceptance.
 
-Real AWS acceptance is still required: verify OIDC trust, backend prefix and lock
-row permissions, cross-team/cross-environment denials, mandatory workload boundary,
-public/private access and TLS enforcement, idempotent reapply, wrong-account
-rejection and state-version recovery. Live GitHub environment approval behavior
-also remains unverified until activation. See [verification.md](verification.md)
-for recorded local results; no claim of numerical “99% certainty” substitutes
-for these missing AWS/GitHub checks.
+AWS acceptance must cover OIDC and environment protection, backend and lock
+permissions, cross-team/environment denials, workload boundaries, public/private
+and TLS behavior, wrong-account rejection, no-change reapply, and state recovery.
 
 ## CI permission mapping audit
 
-The scoped policy is checked against an independent whole-policy fixture. A
-separate regression inventory covers the pinned provider's bucket-read actions:
-`GetBucket*` does **not** cover `GetEncryptionConfiguration`,
-`GetAccelerateConfiguration`, `GetLifecycleConfiguration` or
-`GetReplicationConfiguration`, so all four are explicitly granted for the team's
-workload bucket prefix. Ownership-control and tagging deletion use their `Put`
-permissions; there are no invented `DeleteBucketOwnershipControls` or
-`DeleteBucketTagging` IAM actions. Role updates/tags remain scoped to the exact
-workload role. Valid action names were checked against AWS's public machine-readable
-S3/IAM/DynamoDB service authorization metadata; this is structural validation,
-not an IAM authorization-engine test.
-
-Sources: [pinned provider bucket reader](https://github.com/hashicorp/terraform-provider-aws/blob/v6.71.0/internal/service/s3/bucket.go),
-[AWS encryption read permission](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html),
-[AWS ownership-control deletion permission](https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketOwnershipControls.html),
-[AWS tagging deletion permission](https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketTagging.html).
+The [CI identity reference](../modules/team-ci/README.md#policy-checks) owns the
+action inventory, whole-policy checks, and provider/API source references.
