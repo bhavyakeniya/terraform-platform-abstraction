@@ -1,0 +1,83 @@
+{
+  "run_id": "db330b55e93347c0b5f42ba2b2ec0795",
+  "started_at": "2026-11-04T23:00:31.908073+00:00",
+  "image": "localstack/localstack-pro@sha256:e70d1353f0a4efe0832534ddc780dd680d9688720a61a7e678869cb895088c4b",
+  "entitlement": "Hobby (user-provided)",
+  "tool_versions": {
+    "python": "3.13.15",
+    "terraform": "1.17.1",
+    "aws_cli": "aws-cli/2.36.22 Python/3.14.7 Darwin/23.4.0 source/arm64"
+  },
+  "source_hashes": {
+    "modules/team-resources/outputs.tf": "074fa597f83d7abf4a2e5e13773c76a7fd183a163f6e98ad751cd33cf12bb520",
+    "modules/team-resources/locals.tf": "5d81c5a7b19814d266634938c7d425310a21f8d6c25d9866a819d6ad4b9a586b",
+    "modules/team-resources/versions.tf": "c47d129fc805cc8d1be2dc533977e13856a96e32987fd282bf8dbe14aa2b85ca",
+    "modules/team-resources/buckets.tf": "6e45b5f39f46453df0c7eb31f9c395c274de0b940ef706f6b0d53dd17affba45",
+    "modules/team-resources/variables.tf": "3f5dc7315596173820ce4ffc3d25af5fc8ce71482ac78ee6c508b3c735491432",
+    "modules/team-resources/iam.tf": "74b2694a757167b0fc748fb5e9cb97a52d4cc17f65dada7a66703e3af5b117e9",
+    "modules/team-resources/.terraform.lock.hcl": "f501f2ceafb129a7687154521a400e2681ca6453213a2d4da2aa2e8f1d04a69a",
+    "modules/team-backend/main.tf": "68136440508117f45fba45e27e9e456b75d7d88bf1e7964bbfd1ddc3a0fa6232",
+    "modules/team-backend/versions.tf": "cc3045676db2303332bacef3cdfa7c193a3543d2923d2fdfa231f5ad48b612ae",
+    "modules/team-backend/variables.tf": "baed070d725a08794820ea5f2d7166019a8161e0f9d59ee3692772a7ec368ee8",
+    "modules/team-backend/.terraform.lock.hcl": "f501f2ceafb129a7687154521a400e2681ca6453213a2d4da2aa2e8f1d04a69a",
+    "modules/team-ci/main.tf": "cf2f758393dc92cdf2d70211bf428a4769ecaa50fa429bb734d4a8d65b806009",
+    "modules/team-ci/versions.tf": "cc3045676db2303332bacef3cdfa7c193a3543d2923d2fdfa231f5ad48b612ae",
+    "modules/team-ci/variables.tf": "3e1bba5f790fc86f637fa91f9139d485746a2fe1d806f0e6331d85516fd681cc",
+    "modules/team-ci/.terraform.lock.hcl": "f501f2ceafb129a7687154521a400e2681ca6453213a2d4da2aa2e8f1d04a69a",
+    "stacks/team/outputs.tf": "80db2f36410577cbb8faa4705935dc9b353725b5dd4655ad405cb1e354f0d3a8",
+    "stacks/team/main.tf": "f4ff976e78621ecb61c51d3b681023798a1edf837b80b2ebd02346b69b481c97",
+    "stacks/team/versions.tf": "c47d129fc805cc8d1be2dc533977e13856a96e32987fd282bf8dbe14aa2b85ca",
+    "stacks/team/caller_identity.tf": "4054b5e826aff3fed3d634b207fb7bdeeea55adcac0abdf4eba980e37305b39b",
+    "stacks/team/providers.tf": "e560459e721bd6671314880870035c5c820f046ba28a0a8bfba07cc478d180c1",
+    "stacks/team/variables.tf": "20a3db6d2dcd33b7d71585b90a3e79caeb9761931c4165ad1233513ee7293c96",
+    "stacks/team/backend.tf": "b3c3bd0963057f87d68e4c86019dd3f3db6b0437a42b6bb3f531a9e03531d6d0",
+    "stacks/team/.terraform.lock.hcl": "f501f2ceafb129a7687154521a400e2681ca6453213a2d4da2aa2e8f1d04a69a",
+    "stacks/backends/main.tf": "3bdbb771e5aad881feeaf8692ca07b0f38d54705a0ecc74aa0575a83195cc73e",
+    "stacks/backends/versions.tf": "cc3045676db2303332bacef3cdfa7c193a3543d2923d2fdfa231f5ad48b612ae",
+    "stacks/backends/variables.tf": "bf3d70bf8aed363b6be919a3b7aa594e282b281dae43ceaf9eb4f5e4a783b1a4",
+    "stacks/backends/.terraform.lock.hcl": "f501f2ceafb129a7687154521a400e2681ca6453213a2d4da2aa2e8f1d04a69a"
+  },
+  "consumers": {
+    "payments/dev": {
+      "buckets": {
+        "receipts": "sumup--dev--payments--receipts",
+        "settlements": "sumup--dev--payments--settlements"
+      },
+      "bucket_count": 2,
+      "declaration_sha256": "d87fd50b1af8a7d80bac123269364433ccbc9e624a2a38f9840fa557bd8c0cf0",
+      "backend_key": "workloads/000000000000/dev/teams/payments/terraform.tfstate",
+      "baseline": "PASS",
+      "lifecycle": "NOT_RUN"
+    },
+    "payments/prod": {
+      "buckets": {
+        "receipts": "sumup--prod--payments--receipts",
+        "settlements": "sumup--prod--payments--settlements"
+      },
+      "bucket_count": 2,
+      "declaration_sha256": "d87fd50b1af8a7d80bac123269364433ccbc9e624a2a38f9840fa557bd8c0cf0",
+      "backend_key": "workloads/000000000000/prod/teams/payments/terraform.tfstate",
+      "baseline": "PASS",
+      "lifecycle": "NOT_RUN"
+    },
+    "payments/staging": {
+      "buckets": {
+        "receipts": "sumup--staging--payments--receipts",
+        "settlements": "sumup--staging--payments--settlements"
+      },
+      "bucket_count": 2,
+      "declaration_sha256": "d87fd50b1af8a7d80bac123269364433ccbc9e624a2a38f9840fa557bd8c0cf0",
+      "backend_key": "workloads/000000000000/staging/teams/payments/terraform.tfstate",
+      "baseline": "PASS",
+      "lifecycle": "NOT_RUN"
+    }
+  },
+  "status": "PASS",
+  "iam_enforcement": "UNVERIFIED",
+  "aws_acceptance": "UNVERIFIED",
+  "s3_backend_locking": "PASS",
+  "backend_type": "S3 + DynamoDB",
+  "mode": "baseline-only",
+  "runtime_version": "2026.10.5",
+  "cleanup": "PASS"
+}

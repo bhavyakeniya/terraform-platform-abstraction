@@ -1,0 +1,63 @@
+{
+  "run_id": "a95f3a61ef6e48d6a8c233727dbbf24e",
+  "image": "localstack/localstack-pro@sha256:e70d1353f0a4efe0832534ddc780dd680d9688720a61a7e678869cb895088c4b",
+  "entitlement": "Hobby (user-provided)",
+  "source_hashes": {
+    "modules/team-resources/outputs.tf": "074fa597f83d7abf4a2e5e13773c76a7fd183a163f6e98ad751cd33cf12bb520",
+    "modules/team-resources/locals.tf": "5d81c5a7b19814d266634938c7d425310a21f8d6c25d9866a819d6ad4b9a586b",
+    "modules/team-resources/versions.tf": "c47d129fc805cc8d1be2dc533977e13856a96e32987fd282bf8dbe14aa2b85ca",
+    "modules/team-resources/buckets.tf": "6e45b5f39f46453df0c7eb31f9c395c274de0b940ef706f6b0d53dd17affba45",
+    "modules/team-resources/variables.tf": "b755830ba89f4f4b6924f33d1849cc477f5897cf2c015ede2e5124bd801d70df",
+    "modules/team-resources/iam.tf": "030441eb7f737eaff0e782a23021e7a5db417d083c4f2d26ebf97785e8deeb45",
+    "modules/team-resources/.terraform.lock.hcl": "f501f2ceafb129a7687154521a400e2681ca6453213a2d4da2aa2e8f1d04a69a",
+    "stacks/team/outputs.tf": "80db2f36410577cbb8faa4705935dc9b353725b5dd4655ad405cb1e354f0d3a8",
+    "stacks/team/main.tf": "0d2e6c350311f95699b818bdec89593f45dff11969022afc6fddd3589637275f",
+    "stacks/team/versions.tf": "c47d129fc805cc8d1be2dc533977e13856a96e32987fd282bf8dbe14aa2b85ca",
+    "stacks/team/caller_identity.tf": "4054b5e826aff3fed3d634b207fb7bdeeea55adcac0abdf4eba980e37305b39b",
+    "stacks/team/providers.tf": "e560459e721bd6671314880870035c5c820f046ba28a0a8bfba07cc478d180c1",
+    "stacks/team/variables.tf": "0dfd180c2d02128749e6fc444bd0205173145a4a72078942c9fc8100ff74381d",
+    "stacks/team/backend.tf": "b3c3bd0963057f87d68e4c86019dd3f3db6b0437a42b6bb3f531a9e03531d6d0",
+    "stacks/team/.terraform.lock.hcl": "f501f2ceafb129a7687154521a400e2681ca6453213a2d4da2aa2e8f1d04a69a"
+  },
+  "consumers": {
+    "payments": {
+      "buckets": {
+        "receipts": "sumup--demo--payments--receipts",
+        "settlements": "sumup--demo--payments--settlements"
+      },
+      "bucket_count": 2,
+      "backend_key": "workloads/000000000000/demo/teams/payments/terraform.tfstate",
+      "baseline": "PASS",
+      "lifecycle": "PASS"
+    },
+    "customers": {
+      "buckets": {
+        "profiles": "sumup--demo--customers--profiles",
+        "exports": "sumup--demo--customers--exports",
+        "help-assets": "sumup--demo--customers--help-assets"
+      },
+      "bucket_count": 3,
+      "backend_key": "workloads/000000000000/demo/teams/customers/terraform.tfstate",
+      "baseline": "PASS",
+      "lifecycle": "PASS"
+    },
+    "accounting": {
+      "buckets": {
+        "ledger": "sumup--demo--accounting--ledger",
+        "invoices": "sumup--demo--accounting--invoices",
+        "reports": "sumup--demo--accounting--reports",
+        "audit-history": "sumup--demo--accounting--audit-history"
+      },
+      "bucket_count": 4,
+      "backend_key": "workloads/000000000000/demo/teams/accounting/terraform.tfstate",
+      "baseline": "PASS",
+      "lifecycle": "PASS"
+    }
+  },
+  "status": "PASS",
+  "iam_enforcement": "UNVERIFIED",
+  "aws_acceptance": "UNVERIFIED",
+  "s3_backend_locking": "NOT_RUN",
+  "runtime_version": "2026.10.5",
+  "cleanup": "PASS"
+}
