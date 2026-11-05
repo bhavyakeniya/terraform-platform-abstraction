@@ -64,7 +64,7 @@ claimed: AWS catalogs still contain fixture accounts with deployment disabled.
 | Backend module native | PASS — 3 runs: private/versioned/encrypted/locked contract, reserved-name rejection, maximum 46-character name |
 | CI identity native | PASS — 5 runs: exact OIDC trust, scoped state/locks, protected boundary, private recovery upload and whole-policy equality |
 | Bootstrap root native | PASS — 2 runs, plus validate: team/backend cardinality and rejection of duplicate team/environment CI bindings |
-| Declaration/root checks | PASS — both v1 compatibility examples, fixture smoke and all nine v2 consumer environment declarations |
+| Declaration/root checks | PASS — both committed examples, fixture smoke and all nine consumer environment declarations |
 | Workflow syntax | PASS — official actionlint 1.7.12 against platform workflows and a generated pinned caller; the workflows have additionally been executed on GitHub (below) |
 | 300-team configuration scale | PASS — 300 distinct backend names and 900 unique CI bindings generated from one registry; AWS capacity remains unverified |
 | Full free-Hobby integration | PASS — all nine team/environment configurations, 27 workload buckets, actual S3/DynamoDB backends, extended lifecycle, lock contention and cleanup |

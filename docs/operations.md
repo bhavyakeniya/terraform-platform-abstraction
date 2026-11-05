@@ -3,12 +3,14 @@
 
 # Operations
 
-Everything in this document describes **documented, not-yet-activated**
-procedure — documented now, activated in a later pass — except the two
-sections marked otherwise. None of it is implemented code
-in this release, and none of it should be read as evidence that a real
-deployment has happened. Real execution needs G-AWS, G-IDENTITY, and
-relevant public-access approvals — none of which exist yet.
+Everything in this document describes **operator procedure that has never been
+executed against AWS**, except the two sections marked otherwise. Parts of it
+are now implemented — the delivery workflow and `scripts/deploy.py` perform the
+plan/apply steps — but no run has touched a real account, and nothing here
+should be read as evidence that a deployment has happened. Real execution needs
+a real AWS account (G-AWS), the intended workload trust principal (G-IDENTITY),
+and named public-access approval, none of which exist yet. See
+[verification.md](verification.md) for those gates.
 
 ## Real plan/apply procedure (documented now, activated pass two)
 
@@ -53,9 +55,10 @@ state key and exact lock/checksum rows. CI identities are scoped per environment
 workload roles get no backend access. Bootstrap state is separate privileged
 platform state, not a team's workload state.
 
-The current deployment path uses `encrypt=true` and `dynamodb_table`, with fresh
-initialization per job. Legacy v1 rendering uses the same DynamoDB locking convention. Never mix locking
-mechanisms on one state without a coordinated migration.
+The deployment path uses `encrypt=true` and `dynamodb_table`, with fresh
+initialization per job. Never mix locking mechanisms on one state without a
+coordinated migration: if S3 native lock files (`use_lockfile`) are adopted
+later, every writer of that state must switch at the same time.
 
 See [the environment/delivery guide](environments-and-delivery.md) for bootstrap,
 OIDC enrollment, shared plan/apply, backend migration, DynamoDB deprecation and

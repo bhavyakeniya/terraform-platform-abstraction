@@ -1,7 +1,7 @@
 # team-resources
 
-Provisions exactly one team's S3 buckets and one workload IAM role. No
-defaults anywhere — every input is required. Invoked once per team by
+Provisions exactly one team's S3 buckets and one workload IAM role. Every
+input that describes the team is required and has no default. Invoked once per team by
 `stacks/team` (never `for_each` across teams at this layer); scaling to
 300+ teams means running the root repeatedly, never changing this module.
 
@@ -9,16 +9,22 @@ defaults anywhere — every input is required. Invoked once per team by
 
 | Input | Type | Supplied by |
 | --- | --- | --- |
-| `team_id` | `string` | Validated selected directory or explicit fixture ID |
+| `team_id` | `string` | Validated team identifier from the team's `team.json`, or an explicit fixture ID |
 | `environment` | `string` | Platform configuration |
 | `account_id` | `string`, exactly 12 digits | Platform configuration |
 | `owner` | `string` | Validated declaration |
 | `buckets` | `map(object({ visibility = string }))` | Validated declaration |
 | `trusted_principal_arn` | `string` | Platform configuration; exact same-account IAM role ARN, no wildcard/account-root trust |
+| `permissions_boundary_arn` | `string`, optional (default `null`) | Platform configuration; when set it must be exactly the boundary for this account/team/environment |
 
-Every input has a description, no default, and `nullable = false`: callers must
-supply a non-null value. Nulls inside the bucket map still depend on the nested
+Every input has a description and `nullable = false`: callers must supply a
+non-null value. Nulls inside the bucket map still depend on the nested
 type/value contract; top-level nullability is not recursive.
+
+`permissions_boundary_arn` is the one input with a default. It defaults to
+`null` so a direct module consumer can use the module without the platform's
+CI-provisioned boundary; the delivery path always supplies it, and supplying
+another team's boundary is rejected.
 
 Every input is re-validated here with `variable { validation {...} }` blocks
 — blocking, not a warning-only `check` block — even though Python already

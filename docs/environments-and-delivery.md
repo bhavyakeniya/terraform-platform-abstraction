@@ -224,10 +224,14 @@ centrally, and consumers intentionally update the immutable pin through review.
 | Trigger | Behavior |
 | --- | --- |
 | Pull request | Validate all declared environments and business expectations, then native Terraform mocked-root tests. No AWS credentials or apply. |
-| Push to the default branch | Check all declarations; plan changed environments against AWS when configured. Never automatically apply. |
+| Push to the default branch | Check the changed environments, credential-free. The generated caller requests `check` for both automatic triggers, so no AWS plan runs without a manual dispatch. |
 | Manual `mode=check` | Credential-free checks; optionally `localstack=true` for Hobby integration, without AWS. |
 | Manual `mode=plan` | Fresh AWS plan for the selected environment. |
 | Manual `mode=apply` | Fresh saved plan and apply of **that exact new plan** in the same job. |
+
+The reusable workflow still accepts `mode: plan` from a caller's push trigger;
+the generated caller deliberately does not use it, so that merging a JSON edit
+can never reach AWS without someone dispatching the run.
 
 For optional CI emulator integration, add `LOCALSTACK_AUTH_TOKEN` as a consumer
 repository secret and dispatch `mode=check`, `localstack=true` from the default
