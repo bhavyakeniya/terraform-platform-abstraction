@@ -1,0 +1,133 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "OwnWorkloadBuckets",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:DeleteBucket",
+        "s3:GetBucket*",
+        "s3:GetEncryptionConfiguration",
+        "s3:GetAccelerateConfiguration",
+        "s3:GetLifecycleConfiguration",
+        "s3:GetReplicationConfiguration",
+        "s3:ListBucket",
+        "s3:ListBucketVersions",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy",
+        "s3:PutBucketVersioning",
+        "s3:PutEncryptionConfiguration",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutBucketOwnershipControls",
+        "s3:PutBucketTagging"
+      ],
+      "Resource": "arn:aws:s3:::sumup--dev--payments--*"
+    },
+    {
+      "Sid": "ListOwnStatePrefix",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::sumup--tfstate--123456789012--payments",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "workloads/123456789012/dev/teams/payments/terraform.tfstate",
+            "workloads/123456789012/dev/teams/payments/terraform.tfstate/*"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "OwnStateObject",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::sumup--tfstate--123456789012--payments/workloads/123456789012/dev/teams/payments/terraform.tfstate"
+    },
+    {
+      "Sid": "LocateBackend",
+      "Effect": "Allow",
+      "Action": "s3:GetBucketLocation",
+      "Resource": "arn:aws:s3:::sumup--tfstate--123456789012--payments"
+    },
+    {
+      "Sid": "OwnStateLock",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:DeleteItem"
+      ],
+      "Resource": "arn:aws:dynamodb:eu-central-1:123456789012:table/sumup--tfstate--123456789012--payments",
+      "Condition": {
+        "ForAllValues:StringEquals": {
+          "dynamodb:LeadingKeys": [
+            "sumup--tfstate--123456789012--payments/workloads/123456789012/dev/teams/payments/terraform.tfstate",
+            "sumup--tfstate--123456789012--payments/workloads/123456789012/dev/teams/payments/terraform.tfstate-md5"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "DescribeOwnLockTable",
+      "Effect": "Allow",
+      "Action": "dynamodb:DescribeTable",
+      "Resource": "arn:aws:dynamodb:eu-central-1:123456789012:table/sumup--tfstate--123456789012--payments"
+    },
+    {
+      "Sid": "CreateBoundedWorkloadRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:PutRolePermissionsBoundary"
+      ],
+      "Resource": "arn:aws:iam::123456789012:role/team-platform/runtime/dev/payments/tfp--dev--payments--s3",
+      "Condition": {
+        "StringEquals": {
+          "iam:PermissionsBoundary": "arn:aws:iam::123456789012:policy/sumup-boundary--dev--payments"
+        }
+      }
+    },
+    {
+      "Sid": "ManageOwnWorkloadRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole",
+        "iam:ListRoleTags",
+        "iam:UpdateRole",
+        "iam:UpdateRoleDescription",
+        "iam:DeleteRole",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:GetRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListInstanceProfilesForRole"
+      ],
+      "Resource": "arn:aws:iam::123456789012:role/team-platform/runtime/dev/payments/tfp--dev--payments--s3"
+    },
+    {
+      "Sid": "ProtectBoundary",
+      "Effect": "Deny",
+      "Action": "iam:DeleteRolePermissionsBoundary",
+      "Resource": "arn:aws:iam::123456789012:role/team-platform/runtime/dev/payments/tfp--dev--payments--s3"
+    },
+    {
+      "Sid": "PrivateEmergencyState",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::sumup--tfstate--123456789012--payments/recovery/dev/*",
+      "Condition": {
+        "StringEquals": {
+          "s3:x-amz-server-side-encryption": "AES256"
+        }
+      }
+    }
+  ]
+}
