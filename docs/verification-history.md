@@ -26,6 +26,12 @@ and existing lock-file hashes were unchanged.
   environment — the isolated environment is what CI and `make security`
   use; the globally installed Checkov is ignored.
 
+Scanning reusable modules without concrete inputs left visibility and
+`for_each` branches unresolved. The source snapshot and fixture supply those
+inputs; keyed bucket references let Checkov associate versioning and access
+controls with the correct buckets. This avoided adding exceptions for unresolved
+private-access or versioning checks.
+
 ## Environment and shared-delivery extension — 5 November 2026
 
 The full emulator run is recorded in

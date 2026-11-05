@@ -39,45 +39,31 @@ and parsing errors fail the gate. There is no soft-fail or severity-only filter.
 
 ## Coverage and CI wiring
 
-All production Terraform under `modules/` and `stacks/` is scanned, together
-with `examples/security/main.tf`. The wrapper makes a temporary source-only
-snapshot, supplies synthetic inputs to the actual workload/bootstrap roots via
-the existing contract/renderer, and never writes auto.tfvars into the working
-roots. This avoids unresolved bootstrap OIDC subjects becoming false positives.
-The real workload root receives private-only inputs; the dedicated public fixture
-exercises public behavior without waiving private checks on that real root.
+The scanners check `modules/`, `stacks/`, and `examples/security/main.tf` in a
+source-only temporary copy. Synthetic inputs make the workload and bootstrap
+roots scannable without deployment or changes to the working Terraform files.
 
-`examples/security/main.tf` calls all three modules with concrete inputs, using
-separate private and public callers so branch-specific exceptions remain scoped.
-Its synthetic account guard makes the composition unsuitable for real AWS apply.
-Running scanners only against input-free reusable modules left visibility/for_each
-branches unresolved; this composition supplies those values without deployment.
+The workload root uses private-bucket inputs. A separate fixture calls all three
+modules and exercises both public and private buckets; public-access exceptions
+apply only to its public caller. Its synthetic-account guard prevents AWS use.
 
-The module's `for_each = var.buckets` resources let Checkov associate
-versioning and access controls with their specific bucket, rather than losing
-that link when scanning modules without concrete inputs.
+| Where | Enforcement |
+| --- | --- |
+| Platform CI | The `security` job must pass before `checks` runs. |
+| Team CI | The shared `check` job runs the same security gate; plan and apply depend on it. |
+| Backend bootstrap | The operator runs `make security test-security` before reviewing the bootstrap plan. |
 
-The main platform workflow has a required `security` job, and its checks job
-requires that job. The reusable team workflow runs the same security composite
-inside its credential-free `check` job. Deployment requires `check`, so both plan
-and apply paths are gated. Bootstrap operators also run these commands before
-reviewing their bootstrap plan. Both scanners now execute on GitHub-hosted runners as well as locally; what
-remains unverified is AWS authorization, not the scanners running.
+Regression tests run the actual scanner CLIs against deliberately unsafe source
+copies:
 
-The canaries run the actual scanner CLI in temporary source copies. They prove:
+- Disabling `restrict_public_buckets` for a private bucket must fail both tools.
+- Adding an administrator IAM policy must fail Checkov. Trivy's pinned rules do
+  not detect this case, so the tools provide complementary coverage.
 
-- Setting private `restrict_public_buckets=false` fails both tools, despite the
-  public example's narrow exceptions.
-- Adding an Allow `Action="*", Resource="*"` IAM policy directly to the real
-  workload-root source fails Checkov and the CLI
-  gate. Trivy 0.73's embedded rules did not flag that standalone IAM canary;
-  the tools provide complementary coverage, not identical guarantees.
-
-Native tests still verify complete policies, explicit visibility, exact output
-keys and module invariants. Scanner source-graph evaluation and a concrete fixture
-cannot prove every possible input or replace real AWS denial/public/TLS tests.
-TFLint is useful structural linting, but is not a substitute for these security
-rules and is not required by this gate.
+Native Terraform tests also check complete policies, visibility, and output
+contracts. These checks do not prove effective AWS authorization or cover every
+possible input. Scanner implementation history is in
+[verification-history.md](verification-history.md).
 
 ## Explicit scope exceptions
 
