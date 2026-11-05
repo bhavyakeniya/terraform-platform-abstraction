@@ -1,9 +1,10 @@
 # Verification
 
-Honest status: **locally verified implementation and emulator integration;
-live GitHub and AWS verification remain pending.** Results below distinguish
-credential-free Python/native mocks, structural CI checks, and real-provider
-LocalStack lifecycle tests. None is a live GitHub run or real AWS deployment.
+Honest status: **locally verified implementation, emulator integration, and
+live credential-free GitHub Actions runs across all four repositories; real AWS
+verification remains blocked.** Results below distinguish credential-free
+Python/native mocks, executed GitHub Actions runs, and real-provider LocalStack
+lifecycle tests. None of them is a real AWS deployment.
 
 The later user-requested consumer extension implements a repeatable Python
 runner with an owned ephemeral Docker container (no separate Compose service).
@@ -17,7 +18,7 @@ Both deployed roots now constrain Terraform to 1.17.x (`~> 1.17.0`) and AWS to
 and existing lock-file hashes are unchanged. Module compatibility ranges remain
 broad. No AWS/state operation or provider upgrade was performed.
 
-- Full local suite: **PASS**, 265 Python tests, native Terraform suites and all
+- Full local suite: **PASS**, 205 Python tests, native Terraform suites and all
   nine consumer declarations. Scanner canaries run separately as a required
   `make check` prerequisite: **7/7 PASS**, including two real CLI negative cases.
 - Latest security scope: every production module/root plus the concrete
@@ -38,9 +39,9 @@ broad. No AWS/state operation or provider upgrade was performed.
   keys/addresses and values are preserved; native regression checks pass.
 - Both deployment roots and the scanner composition passed backendless read-only
   initialization and `terraform validate`; formatting and workflow actionlint pass.
-- Security is blocking on both platform and reusable consumer CI paths. This is
-  locally verified wiring/execution, not a live GitHub run or AWS authorization
-  proof. Accepted scope exceptions and upgrade steps are documented in
+- Security is blocking on both platform and reusable consumer CI paths, and has
+  now executed on GitHub-hosted runners as well as locally. It is not an AWS
+  authorization proof. Accepted scope exceptions and upgrade steps are documented in
   [security-scanning.md](security-scanning.md).
 
 The prior LocalStack snapshots below predate metadata/scanner/key-reference
@@ -51,19 +52,20 @@ and existing provider selections were not upgraded.
 ## Environment and shared-delivery extension — 5 November 2026
 
 This section supersedes the historical results below for the current consumer,
-backend and delivery path. No live GitHub workflow or real AWS deployment is
-claimed. AWS catalogs still contain fixture accounts with deployment disabled.
+backend and delivery path. GitHub workflows have since executed on real
+runners (see "Live GitHub Actions runs" below). No real AWS deployment is
+claimed: AWS catalogs still contain fixture accounts with deployment disabled.
 
 | Check | Current evidence |
 | --- | --- |
-| Full Python suite | PASS — 265 tests, including 44 environment/onboarding/delivery contracts |
+| Full Python suite | PASS — 205 tests, including 44 environment/onboarding/delivery contracts |
 | Workload native contract/security | PASS — 18 contract + 17 security runs, including positive boundary attachment and rejecting another team's boundary |
 | Workload root generic | PASS — 2 runs |
 | Backend module native | PASS — 3 runs: private/versioned/encrypted/locked contract, reserved-name rejection, maximum 46-character name |
 | CI identity native | PASS — 5 runs: exact OIDC trust, scoped state/locks, protected boundary, private recovery upload and whole-policy equality |
 | Bootstrap root native | PASS — 2 runs, plus validate: team/backend cardinality and rejection of duplicate team/environment CI bindings |
 | Declaration/root checks | PASS — both v1 compatibility examples, fixture smoke and all nine v2 consumer environment declarations |
-| Workflow syntax | PASS — official actionlint 1.7.12 against platform workflows and a generated pinned caller; no live GitHub claim |
+| Workflow syntax | PASS — official actionlint 1.7.12 against platform workflows and a generated pinned caller; the workflows have additionally been executed on GitHub (below) |
 | 300-team configuration scale | PASS — 300 distinct backend names and 900 unique CI bindings generated from one registry; AWS capacity remains unverified |
 | Full free-Hobby integration | PASS — all nine team/environment configurations, 27 workload buckets, actual S3/DynamoDB backends, extended lifecycle, lock contention and cleanup |
 | Final-source backend repeat | PASS — payments/dev, staging and prod; actual state versions/encryption, contention, reapply and cleanup; backend/workload source hashes match; final CI permission mapping is separately checked |
@@ -96,6 +98,58 @@ anonymous-public/private or TLS enforcement. The shared manual apply creates a
 fresh plan; it does not provide a human approval pause after that exact plan.
 See [delivery](environments-and-delivery.md) for activation, migration and quotas.
 
+## Live GitHub Actions runs — 5 November 2026
+
+All four repositories are public under `bhavyakeniya` and their workflows have
+executed on GitHub-hosted runners. These are real runs, not structural checks.
+
+| Repository | Workflow | Result |
+| --- | --- | --- |
+| [terraform-platform-abstraction](https://github.com/bhavyakeniya/terraform-platform-abstraction) | `terraform.yml` | **PASS** — `security`, `checks`, `fixture-smoke` |
+| [team-payments](https://github.com/bhavyakeniya/team-payments) | `infrastructure.yml` | **PASS** — `check`; `deploy`/`localstack` skipped |
+| [team-customers](https://github.com/bhavyakeniya/team-customers) | `infrastructure.yml` | **PASS** — `check`; `deploy`/`localstack` skipped |
+| [team-accounting](https://github.com/bhavyakeniya/team-accounting) | `infrastructure.yml` | **PASS** — `check`; `deploy`/`localstack` skipped |
+
+Each team run checks out the platform at its pinned SHA, renders that team's
+declarations and validates all three environments through the real module under
+`mock_provider`. Logged output per environment, for example in team-payments:
+
+```
+payments/dev: declaration, expectations and mocked root PASS
+payments/prod: declaration, expectations and mocked root PASS
+payments/staging: declaration, expectations and mocked root PASS
+```
+
+This is the strongest evidence in this document for the abstraction working
+across repository boundaries: a team repository containing only JSON produces a
+validated plan using Terraform it does not own.
+
+**A real defect was found only by running on GitHub.** The first platform run
+failed. Every `.terraform.lock.hcl` carried a single `h1:` hash for
+`darwin_arm64`, generated on the development workstation. On `linux_amd64`
+runners, provider verification failed under `-lockfile=readonly`. `make check`
+passed locally on every attempt and always would have; no amount of local
+testing on one architecture could surface it. Fixed by recording both platforms
+in all six tracked lock files:
+
+```bash
+terraform providers lock -platform=linux_amd64 -platform=darwin_arm64
+```
+
+Subsequent runs pass. This is the concrete reason "it passes locally" is
+reported separately from "it passes in CI" throughout this document.
+
+### What these runs do not establish
+
+- **No AWS authorization.** No job holds cloud credentials. `deploy` is skipped
+  on automatic runs and, when dispatched manually, stops at the platform
+  registration guard because every environment catalog has
+  `deployment_enabled: false` with a fixture account.
+- **No deployment protections.** Branch protection, required reviewers,
+  protected environments and OIDC trust are not configured (G-GH).
+- **Default-branch pushes only so far.** Pull-request runs use the same
+  credential-free path but have not been exercised with a real PR.
+
 ## Historical first-pass and earlier consumer results
 
 ## Exact revisions (at last local run)
@@ -110,27 +164,32 @@ See [delivery](environments-and-delivery.md) for activation, migration and quota
 | jsonschema | 4.26.0 | `uv.lock` |
 | pyyaml | 6.0.3 | `uv.lock` (test-only: workflow YAML structural checks) |
 
-Results below are reproducible by running the commands shown. Once the
-repository is pushed, record here the exact commit SHA that passed.
+Results below are reproducible by running the commands shown. Every commit on
+`main` is additionally verified by the GitHub Actions run for that exact SHA —
+see [the repository's Actions history](https://github.com/bhavyakeniya/terraform-platform-abstraction/actions),
+which is the authoritative per-commit record rather than a SHA copied into this
+file by hand.
 
 ## Local results
 
 | Suite | Command | Result |
 | --- | --- | --- |
 | Python contracts/consumers | `uv run pytest tests/ -q` | **PASS** — 205/205 (54 contract, 75 context, 44 environments, 11 pipeline, 16 consumer/runner, 5 security) |
-| Module native mocks (contract) | `terraform test -filter=tests/contract.tftest.hcl` | **PASS** — 16/16 (T01, T05, essential input-validation failures) |
-| Module native mocks (security) | `terraform test -filter=tests/security.tftest.hcl` | **PASS** — 17/17 (T02-T04, T06 oversized-policy, T08 full reserved-suffix sweep) |
-| Root native mocks (generic, T07) | `terraform test -filter=tests/generic.tftest.hcl` | **PASS** — 2/2 runs, executed once (team-independent) via `make test-root-generic` |
-| Root native mocks (declaration) | `terraform test -filter=tests/declaration.tftest.hcl -var-file=...` | **PASS** — 1/1 run, executed once per committed example (2 total executions) via `make check-examples` |
-| Fixture smoke | `make fixture-smoke` | **PASS** — ephemeral fixtures, never committed, never under `teams/` |
+| `team-resources` native mocks (contract) | `make test-module` | **PASS** — 18/18 (resource counts, stable identities, input-validation failures, permissions boundary) |
+| `team-resources` native mocks (security) | `make test-module` | **PASS** — 17/17 (controls, public/private matrix, exact policies, oversized-policy, reserved-suffix sweep) |
+| `team-backend` native mocks | `make test-backend` | **PASS** — 3/3 (private/versioned/encrypted/locked contract, reserved-name rejection, maximum name length) |
+| `team-ci` native mocks | `make test-backend` | **PASS** — 5/5 (exact OIDC trust, scoped state/lock access, protected boundary, whole-policy equality) |
+| Root native mocks (generic) | `make test-root-generic` | **PASS** — 2/2, executed once (team-independent) |
+| Root native mocks (per declaration) | `make check-examples` | **PASS** — 1 run per committed example (2 executions) |
+| Fixture smoke | `make fixture-smoke` | **PASS** — ephemeral fixtures, never committed |
 | Portable consumer checks | `make test-consumers` | **PASS** — payments, customers, accounting through the shared mocked-root path |
 | `terraform fmt -check -recursive` | `make fmt-check` | **PASS** |
 | Full aggregate | `make check`, AWS credentials unset | **PASS**, roughly 90-110s (varies by machine) |
 
-Final consumer-extension regression: `make check` passed with 265 Python tests. Includes an occupied-port regression:
+Final consumer-extension regression: `make check` passed with 205 Python tests. Includes an occupied-port regression:
 a created-but-not-running container never authorizes cleanup API calls against
-an unrelated service. Consumer workflows/shared action are structurally checked,
-not claimed as live GitHub runs.
+an unrelated service. Consumer workflows and the shared action are both
+structurally checked and executed on GitHub.
 
 Earlier naming-change verification: `make check` passed in approximately 97
 seconds after adopting `sumup--<environment>--<team-id>--<bucket-key>`.
@@ -156,7 +215,7 @@ at the input boundary. Both provider lock files and bucket tags were unchanged.
 | R03 | 1→300+ teams, zero platform code changes | 300-team registry case in `tests/test_environments.py` | PASS (configuration scale; see caveat below) |
 | R04 | Self-contained team-owned declaration | C01-C03, `docs/environments-and-delivery.md` | PASS (contract); real ownership deferred |
 | R05 | Separate state per team | C04, C05 | PASS (keys/derivation); real backend behavior deferred |
-| R06 | Declaration change triggers CI/CD | P01-P07 | PASS (mocked workflow); live run deferred (G-PUBLISH) |
+| R06 | Declaration change triggers CI/CD | P01-P07 + executed runs in all three team repositories | PASS — a declaration change in a team repository triggers its workflow, which selects the changed environments and validates them through the real module |
 | R07 | Role scoped to its own buckets | T04 | PASS (policy structure); real AWS authorization deferred |
 | R08 | Enforced consistent naming | C04, C06, T08 | PASS |
 | R09 | Idempotent, safe to reapply | T05 | PASS (mocked identity stability); real reapply deferred |
@@ -170,7 +229,7 @@ at the input boundary. Both provider lock files and bucket tags were unchanged.
 | --- | --- | --- |
 | Python contracts/consumers | **Implemented and executed** | Pure, credential-free |
 | Terraform native mocks | **Implemented and executed** | `mock_provider`, no network beyond provider download |
-| Live GitHub CI (credential-free) | **BLOCKED** | Needs G-PUBLISH (repo not yet created/pushed) |
+| Live GitHub CI (credential-free) | **PASS** | Executed on GitHub-hosted runners in all four repositories; no job holds cloud credentials |
 | Live GitHub deployment | **NOT_RUN** | Definitions now exist; activation needs real AWS/GitHub configuration |
 | LocalStack | **PASS (provider integration)** | Current naming contract: payments/customers/accounting baseline, lifecycle, recovery, and cleanup passed in an isolated free-supported runtime; IAM enforcement remains UNVERIFIED |
 | AWS sandbox | **NOT_RUN** | No account exists (G-AWS, G-IDENTITY, relevant G-PUBLIC) |
@@ -288,12 +347,12 @@ repeatable/automated. Still **UNVERIFIED**/**NOT_RUN** respectively.
 
 | Gate | Blocks | What's needed |
 | --- | --- | --- |
-| **G-PUBLISH** | Sharing this repository (the assignment's actual deliverable) and a live, credential-free GitHub Actions run | Exact owner/repository name and visibility, explicit go-ahead to create the remote and push |
+| **G-PUBLISH** (met) | Previously blocked sharing this repository and any live GitHub Actions run | Met: the four repositories are public under `bhavyakeniya` and their workflows have run. This opens no AWS authorization |
 | **G-AWS** | Real IAM/S3 behavior, idempotence against a real backend, actual lock contention | A dedicated AWS account/region, authenticated profile, explicit deployment/cleanup authorization |
 | **G-IDENTITY** | Trust-policy correctness against a real principal | The actual intended workload trust principal |
 | **G-LS** (met for local emulator use) | Repeating optional emulator integration | User confirmed free Hobby access; Docker/token/DNS prerequisites must be available on each workstation. This opens no AWS deployment or authorization claim |
 | **G-PUBLIC** | Testing real anonymous public-object access | Named human approval of the exact public bucket keys in the selected sandbox |
-| **G-GH** (pass two) | Restricted deployment identity/OIDC, branch protections | A separate authorization beyond G-PUBLISH; explicitly not implied by sharing the repo |
+| **G-GH** (pass two) | Restricted deployment identity/OIDC, branch protections, protected environments | A separate authorization; explicitly not implied by the repositories now being public and running CI |
 
 None of these are silently treated as passed. Where a gate blocks a
 specific evidence row above, that row says so explicitly rather than
