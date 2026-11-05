@@ -1,10 +1,12 @@
 # Verification
 
-Honest status: **locally verified implementation, emulator integration, and
-live credential-free GitHub Actions runs across all four repositories; real AWS
-verification remains blocked.** Results below distinguish credential-free
-Python/native mocks, executed GitHub Actions runs, and real-provider LocalStack
-lifecycle tests. None of them is a real AWS deployment.
+Honest status: **the current source is verified by local checks and by live
+credential-free GitHub Actions runs across all four repositories. Emulator
+integration passed, but against a 2026-11-04 source snapshot that the tree has
+since moved past. Real AWS verification remains blocked.** Results below
+distinguish credential-free Python/native mocks, executed GitHub Actions runs,
+and real-provider LocalStack lifecycle tests, and say which source each was run
+against. None of them is a real AWS deployment.
 
 The later user-requested consumer extension implements a repeatable Python
 runner with an owned ephemeral Docker container (no separate Compose service).
@@ -67,9 +69,9 @@ claimed: AWS catalogs still contain fixture accounts with deployment disabled.
 | Declaration/root checks | PASS — both committed examples, fixture smoke and all nine consumer environment declarations |
 | Workflow syntax | PASS — official actionlint 1.7.12 against platform workflows and a generated pinned caller; the workflows have additionally been executed on GitHub (below) |
 | 300-team configuration scale | PASS — 300 distinct backend names and 900 unique CI bindings generated from one registry; AWS capacity remains unverified |
-| Full free-Hobby integration | PASS — all nine team/environment configurations, 27 workload buckets, actual S3/DynamoDB backends, extended lifecycle, lock contention and cleanup |
-| Final-source backend repeat | PASS — payments/dev, staging and prod; actual state versions/encryption, contention, reapply and cleanup; backend/workload source hashes match; final CI permission mapping is separately checked |
-| AWS/GitHub acceptance | NOT RUN — real account, published repository/release, OIDC identities and protected environments are not configured |
+| Full free-Hobby integration (same 2026-11-04 snapshot) | PASS **at that snapshot** — all nine team/environment configurations, 27 workload buckets, actual S3/DynamoDB backends, extended lifecycle, lock contention and cleanup. Its recorded source hashes have also diverged from the current tree (17 of 27 files); re-run `make test-localstack` to re-establish it against current source. |
+| Backend repeat against snapshot `db330b55` (2026-11-04) | PASS **at that snapshot** — payments/dev, staging and prod; actual state versions/encryption, contention, reapply and cleanup. Source hashes matched the tree as it stood then; **14 of the 27 recorded files have since changed** (workload naming, bucket configuration, backend source), so this is historical evidence. Only a fresh run would establish current-source integration. |
+| AWS/OIDC acceptance | NOT RUN — the repositories are published and their CI runs, but no real AWS account, registered identity, OIDC trust or protected environment exists |
 
 The full emulator run is recorded in
 [environment-test-results.json](environment-test-results.json), run

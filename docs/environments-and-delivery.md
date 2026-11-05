@@ -224,8 +224,8 @@ centrally, and consumers intentionally update the immutable pin through review.
 
 | Trigger | Behavior |
 | --- | --- |
-| Pull request | Validate all declared environments and business expectations, then native Terraform mocked-root tests. No AWS credentials or apply. |
-| Push to the default branch | Check the changed environments, credential-free. The generated caller requests `check` for both automatic triggers, so no AWS plan runs without a manual dispatch. |
+| Pull request | Validate every declared environment and its business expectations, then native Terraform mocked-root tests. No AWS credentials or apply. |
+| Push to the default branch | Check **every** configured environment, credential-free. Change selection narrows deployment, not validation, and the generated caller requests `check` for both automatic triggers, so no AWS plan runs without a manual dispatch. |
 | Manual `mode=check` | Credential-free checks; optionally `localstack=true` for Hobby integration, without AWS. |
 | Manual `mode=plan` | Fresh AWS plan for the selected environment. |
 | Manual `mode=apply` | Fresh saved plan and apply of **that exact new plan** in the same job. |

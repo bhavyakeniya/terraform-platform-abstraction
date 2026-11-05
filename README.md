@@ -114,12 +114,13 @@ automatically into an isolated locked environment. See
 make check
 ```
 
-Runs, in order: `terraform fmt -check`, the full Python test suite, the
-module's native `terraform test` suites (contract + security), backend/CI/bootstrap
-contracts, all nine consumer declarations, and the root's
-team-independent generic checks (run once, not per team), both committed
-examples through the real render→mocked-root-test pipeline, and the
-fixture-smoke path. Everything is credential-free — no AWS account, no
+Runs, in Makefile order: the Trivy/Checkov security gates and their scanner
+canaries, `terraform fmt -check`, the full Python test suite, the module's
+native `terraform test` suites (contract + security), the root's
+team-independent generic checks (run once, not per team), the backend and CI
+module contracts, both committed examples through the real
+render→mocked-root-test pipeline, the fixture-smoke path, and all nine consumer
+declarations. Everything is credential-free — no AWS account, no
 LocalStack, and nothing reaches the network beyond installing pinned
 dependencies (`uv sync`, the scanner environment) and Terraform's own provider
 download. Exact current case counts live in one place —
@@ -134,9 +135,10 @@ make security          # independent Trivy + locked Checkov rules
 make test-security     # real negative scanner canaries
 make test-module       # module contract.tftest.hcl + security.tftest.hcl
 make test-root-generic # root's team-independent checks (output projection, wrong-account) -- run once
+make test-backend      # team-backend and team-ci module contracts
 make check-examples    # render each example, run its declaration-specific check through the real root
 make fixture-smoke     # local mirror of the CI fixture-smoke job
-make test-consumers    # opt-in checks for the three portable consumer examples
+make test-consumers    # the three consumer mirrors (also part of `make check`)
 make test-localstack   # opt-in real-provider emulator lifecycle; free Hobby token required
 ```
 

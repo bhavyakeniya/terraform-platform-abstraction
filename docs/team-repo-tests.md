@@ -17,13 +17,16 @@ payments/
     dev/{resources.json,expectations.json}
     staging/{resources.json,expectations.json}
     prod/{resources.json,expectations.json}
-  .github/workflows/infrastructure.yml.template   # small generated caller
+  .github/workflows/infrastructure.yml       # generated caller, active and pinned
   Makefile                                   # check / localstack entry points
 ```
 
 `customers` and `accounting` are identical in shape. The committed copies under
 `examples/consumers/<team>/` in this repository mirror them so the platform
-suite can run without the sibling checkouts present.
+suite can run without the sibling checkouts present. Those mirrors keep the
+caller as `infrastructure.yml.template`, deliberately inactive: only the
+published team repositories carry an activated `infrastructure.yml` with a real
+platform repository and pinned SHA.
 
 ## The two layers of checking
 
