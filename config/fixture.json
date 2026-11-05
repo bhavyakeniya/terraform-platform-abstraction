@@ -1,0 +1,7 @@
+{
+  "account_id": "000000000000",
+  "region": "eu-central-1",
+  "environment": "test",
+  "state_bucket": "tfp-fixture-state-do-not-use",
+  "trusted_principal_arn": "arn:aws:iam::000000000000:role/fixture-source"
+}

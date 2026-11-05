@@ -1,0 +1,5 @@
+{
+  "trivy_version": "0.73.0",
+  "trivy_linux_amd64_sha256": "2edd39da482bb4e9831962487b68f68e3928ec3137794757f54d00383d79547b",
+  "checkov_version": "3.3.10"
+}

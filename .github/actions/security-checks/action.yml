@@ -1,0 +1,35 @@
+name: Independent Terraform security checks
+description: Install pinned Trivy/Checkov and fail on unexcepted findings
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+      with:
+        version: 0.12.3
+    - name: Install pinned scanners
+      shell: bash
+      env:
+        SECURITY_PLATFORM_ROOT: ${{ github.action_path }}/../../..
+      run: |
+        set -euo pipefail
+        cd "$SECURITY_PLATFORM_ROOT"
+        test "$(uname -s)/$(uname -m)" = Linux/x86_64
+        security_bin="$RUNNER_TEMP/terraform-security-bin"
+        mkdir -p "$security_bin"
+        trivy_version=$(python3 -c 'import json; print(json.load(open("config/security-tools.json"))["trivy_version"])')
+        trivy_sha=$(python3 -c 'import json; print(json.load(open("config/security-tools.json"))["trivy_linux_amd64_sha256"])')
+        curl --fail --silent --show-error --location --retry 3 \
+          "https://github.com/aquasecurity/trivy/releases/download/v${trivy_version}/trivy_${trivy_version}_Linux-64bit.tar.gz" \
+          --output "$RUNNER_TEMP/trivy.tar.gz"
+        echo "$trivy_sha  $RUNNER_TEMP/trivy.tar.gz" | sha256sum --check --strict
+        tar -xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$security_bin" trivy
+        uv sync --project tools/security --locked --python "$(cat .python-version)"
+        echo "$security_bin" >> "$GITHUB_PATH"
+    - name: Run both blocking security scanners
+      shell: bash
+      env:
+        SECURITY_PLATFORM_ROOT: ${{ github.action_path }}/../../..
+      run: |
+        set -euo pipefail
+        cd "$SECURITY_PLATFORM_ROOT"
+        make security test-security

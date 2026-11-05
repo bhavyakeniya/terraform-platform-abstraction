@@ -1,0 +1,89 @@
+name: terraform
+
+# No pull_request_target -- this never runs with base-branch
+# secrets/permissions against untrusted fork content.
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_VERSION: "1.17.1"
+
+jobs:
+  security:
+    name: Independent Terraform security rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/security-checks
+  checks:
+    name: Local checks (contracts, native mocks, examples)
+    needs: security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: 0.12.3
+
+      - name: Install pinned Terraform
+        run: |
+          curl -fsSL -o /tmp/terraform.zip "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip"
+          sudo unzip -o -q /tmp/terraform.zip -d /usr/local/bin
+          rm /tmp/terraform.zip
+
+      - run: uv sync --locked
+
+      # fixture-smoke is deliberately excluded here: it has its own always-run
+      # job below with its own visible CI status, so running it a second time
+      # nested inside `make check` would just duplicate the work every run.
+      # `make check` locally still runs everything, fixture-smoke included.
+      - name: make check (excluding fixture-smoke, covered by its own job)
+        run: make fmt-check test-python test-module test-root-generic test-backend check-examples test-consumers
+
+  fixture-smoke:
+    name: Fixture smoke (always runs, ephemeral fixtures only, no AWS)
+    runs-on: ubuntu-latest
+    # Unconditional: no `if:`, no `needs:`. Runs on every event regardless of
+    # what changed or what discovery selects -- the point is to prove the
+    # pipeline executes in the live CI environment right now, independent of
+    # whether any real team exists yet (Section 3.5).
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: 0.12.3
+
+      - name: Install pinned Terraform
+        run: |
+          curl -fsSL -o /tmp/terraform.zip "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip"
+          sudo unzip -o -q /tmp/terraform.zip -d /usr/local/bin
+          rm /tmp/terraform.zip
+
+      - run: uv sync --locked
+
+      - name: Generate ephemeral fixtures (never written to teams/, never committed)
+        run: |
+          mkdir -p .runs/fixture-smoke/smoke-a .runs/fixture-smoke/smoke-b
+          cp examples/minimal/resources.json .runs/fixture-smoke/smoke-a/resources.json
+          cp examples/mixed/resources.json .runs/fixture-smoke/smoke-b/resources.json
+
+      - name: Run fixture smoke
+        run: uv run python scripts/team_platform.py smoke-check --fixtures-dir .runs/fixture-smoke --config config/fixture.json

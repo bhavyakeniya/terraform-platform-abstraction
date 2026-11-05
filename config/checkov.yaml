@@ -1,0 +1,7 @@
+framework:
+  - terraform
+download-external-modules: false
+skip-download: true
+skip-results-upload: true
+quiet: true
+compact: true

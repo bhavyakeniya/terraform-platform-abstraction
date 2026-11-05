@@ -1,0 +1,39 @@
+name: Platform consumer checks
+description: Shared declaration checks and optional isolated LocalStack lifecycle
+inputs:
+  team-id:
+    description: Fixed team identifier selected by the consumer workflow
+    required: true
+  consumer-directory:
+    description: Absolute path to the consumer's resources.json and expectations.json
+    required: true
+  mode:
+    description: check (credential-free) or localstack (Hobby token required)
+    default: check
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+      with:
+        version: 0.12.3
+    - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+      with:
+        terraform_version: 1.17.1
+        terraform_wrapper: false
+    - name: Run platform-owned checks
+      shell: bash
+      env:
+        PLATFORM_ROOT: ${{ github.action_path }}/../../..
+        CONSUMER_DIRECTORY: ${{ inputs.consumer-directory }}
+        TEAM_ID: ${{ inputs.team-id }}
+        MODE: ${{ inputs.mode }}
+      run: |
+        set -euo pipefail
+        cd "$PLATFORM_ROOT"
+        uv sync --locked
+        uv run python -m scripts.consumer_platform check --team-id "$TEAM_ID" --consumer-dir "$CONSUMER_DIRECTORY"
+        case "$MODE" in
+          check) ;;
+          localstack) uv run python -m scripts.localstack_check --team-id "$TEAM_ID" --consumer-dir "$CONSUMER_DIRECTORY" ;;
+          *) echo 'Unsupported consumer check mode' >&2; exit 1 ;;
+        esac

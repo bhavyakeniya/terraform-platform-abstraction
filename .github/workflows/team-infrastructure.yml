@@ -1,0 +1,205 @@
+name: Shared team infrastructure
+on:
+  workflow_call:
+    secrets:
+      LOCALSTACK_AUTH_TOKEN:
+        description: Optional free Hobby token; used only in an explicit default-branch emulator run
+        required: false
+    inputs:
+      platform-repository:
+        description: Platform repository, pinned by the generated caller
+        type: string
+        required: true
+      platform-ref:
+        description: The same reviewed forty-character commit used to call this workflow
+        type: string
+        required: true
+      environment:
+        description: Optional environment for a manual dispatch; empty selects changed environments
+        type: string
+        default: ''
+      mode:
+        description: plan, or fresh plan plus apply on a manual default-branch dispatch
+        type: string
+        default: plan
+      localstack:
+        description: Run the optional free Hobby integration from a default-branch dispatch
+        type: boolean
+        default: false
+      allow-destroy:
+        description: Explicit manual authorization for deletion or replacement
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      team: ${{ steps.matrix.outputs.team }}
+      environments: ${{ steps.matrix.outputs.environments }}
+      has_changes: ${{ steps.matrix.outputs.has_changes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: consumer
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate caller inputs
+        env:
+          PLATFORM_REPOSITORY: ${{ inputs.platform-repository }}
+          PLATFORM_REF: ${{ inputs.platform-ref }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          assert re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', os.environ['PLATFORM_REPOSITORY'])
+          assert re.fullmatch(r'[0-9a-f]{40}', os.environ['PLATFORM_REF'])
+          assert os.environ['MODE'] in ('check', 'plan', 'apply')
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ inputs.platform-repository }}
+          ref: ${{ inputs.platform-ref }}
+          path: platform
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+        with:
+          version: 0.12.3
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+      - name: Independent platform security gate
+        uses: ./platform/.github/actions/security-checks
+      - name: Discover environment jobs
+        id: matrix
+        working-directory: platform
+        env:
+          BASE: ${{ github.event_name == 'push' && github.event.before || '' }}
+          SELECTED: ${{ inputs.environment }}
+        run: |
+          uv sync --locked
+          uv run python -m scripts.consumer_matrix --consumer-dir "$GITHUB_WORKSPACE/consumer" --base "$BASE" --environment "$SELECTED"
+      - name: Check every environment without AWS credentials
+        working-directory: platform
+        env:
+          TEAM: ${{ steps.matrix.outputs.team }}
+        run: uv run python -m scripts.consumer_platform check --consumer-dir "$GITHUB_WORKSPACE/consumer" --team-id "$TEAM"
+  deploy:
+    needs: check
+    if: >-
+      inputs.mode != 'check' && needs.check.outputs.has_changes == 'true' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        environment: ${{ fromJSON(needs.check.outputs.environments) }}
+    concurrency:
+      group: team-terraform-${{ github.repository }}-${{ needs.check.outputs.team }}-${{ matrix.environment }}
+      cancel-in-progress: false
+    environment: ${{ matrix.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: consumer
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ inputs.platform-repository }}
+          ref: ${{ inputs.platform-ref }}
+          path: platform
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+        with:
+          version: 0.12.3
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+      - name: Validate platform registration before authentication
+        id: context
+        working-directory: platform
+        env:
+          TEAM: ${{ needs.check.outputs.team }}
+          ENVIRONMENT: ${{ matrix.environment }}
+        run: |
+          uv sync --locked
+          uv run python -m scripts.deploy prepare --consumer-dir "$GITHUB_WORKSPACE/consumer" --team-id "$TEAM" --environment "$ENVIRONMENT" --repository "$GITHUB_REPOSITORY" --out "$RUNNER_TEMP/deployment"
+      - name: Obtain short-lived AWS credentials
+        id: credentials
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-to-assume: ${{ steps.context.outputs.role }}
+          aws-region: ${{ steps.context.outputs.region }}
+          role-session-name: terraform-${{ github.run_id }}
+          unset-current-credentials: true
+      - name: Plan; apply only when explicitly dispatched
+        working-directory: platform
+        env:
+          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'plan' }}
+          ALLOW_DESTROY: ${{ github.event_name == 'workflow_dispatch' && inputs.allow-destroy || false }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          args=()
+          if [ "$ALLOW_DESTROY" = true ]; then args+=(--allow-destroy); fi
+          uv run python -m scripts.deploy run --out "$RUNNER_TEMP/deployment" --mode "$MODE" "${args[@]}"
+      - name: Refresh credentials for emergency state recovery
+        if: failure() && steps.credentials.outcome == 'success'
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        with:
+          role-to-assume: ${{ steps.context.outputs.role }}
+          aws-region: ${{ steps.context.outputs.region }}
+          role-session-name: recovery-${{ github.run_id }}
+          unset-current-credentials: true
+      - name: Preserve any emergency state privately
+        if: failure() && steps.credentials.outcome == 'success'
+        working-directory: platform
+        run: uv run python -m scripts.deploy recover --out "$RUNNER_TEMP/deployment"
+      - name: Remove local plans, state caches and credentials metadata
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/deployment"
+
+  localstack:
+    needs: check
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.localstack &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: consumer
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ inputs.platform-repository }}
+          ref: ${{ inputs.platform-ref }}
+          path: platform
+          persist-credentials: false
+      - uses: ./platform/.github/actions/consumer-check
+        env:
+          LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
+        with:
+          team-id: ${{ needs.check.outputs.team }}
+          consumer-directory: ${{ github.workspace }}/consumer
+          mode: localstack
+      - name: Keep sanitized emulator evidence only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: localstack-evidence
+          path: platform/.runs/localstack/*/evidence.json
+          retention-days: 7
+          if-no-files-found: warn

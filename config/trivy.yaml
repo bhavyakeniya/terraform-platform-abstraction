@@ -1,0 +1,5 @@
+# Command-line options in scripts/security_check.py select offline embedded
+# checks from the pinned executable; no downloaded policy cache is reused.
+misconfiguration:
+  scanners:
+    - terraform
