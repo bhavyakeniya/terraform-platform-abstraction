@@ -34,9 +34,17 @@ its own labeled ephemeral container, performs real provider operations against
 that emulator, and cleans its synthetic resources and container in finally.
 No separate up/down commands are necessary.
 
-To test the actual sibling consumers together:
+To test the actual sibling consumers together, the directory names must match
+the team identities. A default `git clone` produces `team-payments`, so clone
+with an explicit alias:
 
 ```bash
+git clone https://github.com/bhavyakeniya/terraform-platform-abstraction.git terraform_platform_abstraction
+git clone https://github.com/bhavyakeniya/team-payments.git   payments
+git clone https://github.com/bhavyakeniya/team-customers.git  customers
+git clone https://github.com/bhavyakeniya/team-accounting.git accounting
+
+cd terraform_platform_abstraction
 uv run python -m scripts.localstack_check \
   --consumer-dir ../payments \
   --consumer-dir ../customers \

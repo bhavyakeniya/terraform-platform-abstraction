@@ -6,7 +6,9 @@ Configurations live in `environments/dev`, `environments/staging` and
 
 `make check` checks every environment without AWS; pass
 `PLATFORM_DIR=/path/to/terraform-platform-abstraction` if the platform is
-not a sibling directory. `make localstack` exercises
+not a sibling directory. The default assumes the platform is checked out as
+`../terraform_platform_abstraction`, which `git clone` does not produce by
+default — clone with that explicit name or set `PLATFORM_DIR`. `make localstack` exercises
 all three against the isolated free Hobby emulator, including S3 state/DynamoDB locks.
 The platform supplies every Terraform file and all pipeline implementation.
 

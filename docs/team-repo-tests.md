@@ -113,10 +113,10 @@ one team's data:
 - **No AWS call is made.** The provider is mocked. This proves the plan and the
   generated policy are correct in structure, not that AWS's authorization engine
   enforces them as intended.
-- **No live GitHub run.** The team workflow ships as `.yml.template` and becomes
-  active only after the platform repository is published and a reviewed release
-  SHA is filled in. Workflow correctness is checked structurally with
-  `actionlint`, not by execution.
+- **No AWS deployment.** The team workflows are active and their `check` jobs
+  run on GitHub, but `deploy` is skipped on automatic runs and stops at the
+  platform registration guard when dispatched, because no account is enrolled.
+  The `examples/consumers` mirrors keep a `.yml.template` suffix and do not run.
 - **LocalStack is not an authorization oracle.** The free tier reads policies
   back but does not enforce them.
 

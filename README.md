@@ -24,8 +24,10 @@ Start with the [environment and delivery guide](docs/environments-and-delivery.m
 | [team-customers](https://github.com/bhavyakeniya/team-customers) | Example consuming team — JSON declarations only |
 | [team-accounting](https://github.com/bhavyakeniya/team-accounting) | Example consuming team — JSON declarations only |
 
-Each team repository holds nothing but JSON and a six-line workflow that calls
-this platform's reusable workflow at a pinned commit. Their CI checks out this
+Each team repository holds 11 files: six JSON declarations and expectations, a
+`team.json`, a README, a `.gitignore`, a two-target Makefile, and a thin
+workflow that calls this platform's reusable workflow at a pinned commit. No
+Terraform, no provider or backend configuration, no pipeline logic. Their CI checks out this
 repository, renders their declarations, and runs them through the real module
 under `mock_provider` — proving the abstraction works across repository
 boundaries, not just inside this one. See
@@ -118,7 +120,8 @@ contracts, all nine consumer declarations, and the root's
 team-independent generic checks (run once, not per team), both committed
 examples through the real render→mocked-root-test pipeline, and the
 fixture-smoke path. Everything is credential-free — no AWS account, no
-LocalStack, nothing reaches the network except Terraform's own provider
+LocalStack, and nothing reaches the network beyond installing pinned
+dependencies (`uv sync`, the scanner environment) and Terraform's own provider
 download. Exact current case counts live in one place —
 [docs/verification.md](docs/verification.md) — rather than duplicated
 here where they'd drift out of sync; `make check`'s own output is always
@@ -139,8 +142,11 @@ make test-localstack   # opt-in real-provider emulator lifecycle; free Hobby tok
 
 Routine Terraform initialization uses `-lockfile=readonly` in the Make targets
 and Python helper, including the paths invoked by CI. Tests use the committed
-provider selections; dependency upgrades are separate reviewed changes to both
-lock files. Module/root inputs have descriptions and reject top-level nulls.
+provider selections; dependency upgrades are separate reviewed changes across
+the Python lock file and all six committed Terraform lock files. Module and root
+inputs have descriptions and reject top-level nulls, except
+`permissions_boundary_arn`, which defaults to `null` so the module stays usable
+without the platform's CI-provisioned boundary.
 The security suite checks the complete attached IAM policy, and each rendered
 declaration check verifies its output bucket count and keys.
 
@@ -251,22 +257,25 @@ Full contract and every test: [modules/team-resources/README.md](modules/team-re
 | `terraform.yml` (this repo) | PR, push, dispatch | `security` (Trivy/Checkov), `checks` (full local suite), `fixture-smoke` (always, no AWS) |
 | `team-infrastructure.yml` (reusable) | called by each team repo | `check` (credential-free, automatic), `deploy` (manual dispatch only), `localstack` (opt-in) |
 
-No job in this repository holds cloud credentials, runs `apply`, or takes more
-than `contents: read`. Team deploys use short-lived OIDC credentials and are
-never triggered automatically. What this proves versus what it does not:
+No job in **`terraform.yml`** — this repository's own validation workflow —
+holds cloud credentials, runs `apply`, or takes more than `contents: read`.
+`team-infrastructure.yml` is different by design: it also lives here, and its
+`deploy` job requests `id-token: write`, assumes a short-lived OIDC role and
+runs `apply`. That job never fires automatically; it requires a manual dispatch
+from the default branch. What this proves versus what it does not:
 [docs/verification.md](docs/verification.md).
 
 ## Scope boundaries
 
-This release delivers the module, generic root, declaration contract,
-consumer change-selection pipeline, and tests. It explicitly excludes: a real
-onboarded team, actual AWS
-deployment and live GitHub verification. The later extension adds independent
-local team projects, environment catalogs, backend/CI bootstrap modules and a
-shared manual plan/apply workflow, plus an isolated LocalStack harness. OIDC and
-deployment definitions are implemented; activation remains explicitly disabled.
-`docs/verification.md` separates local evidence from AWS behavior and
-publication prerequisites.
+**Published and CI-verified:** the module, generic root, declaration contract,
+consumer change-selection pipeline, tests, environment catalogs, backend and CI
+bootstrap modules, the shared plan/apply workflow, and the LocalStack harness.
+All four repositories run their checks on GitHub.
+
+**Not verified:** anything requiring AWS. No account is enrolled, OIDC trust and
+protected environments are not configured, and no plan or apply has run against
+real infrastructure. The three teams are demonstrations, not production
+onboarding. `docs/verification.md` separates what is proven from what is not.
 
 ## Second pass
 

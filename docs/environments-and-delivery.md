@@ -5,9 +5,10 @@ rules, validation, and the plan/apply implementation. A team does not fork
 Terraform or write its own deployment scripts.
 
 The checked-in AWS accounts are **fixtures**, and `deployment_enabled` is false.
-Nothing has been pushed, and no real AWS infrastructure has been provisioned.
-The workflow definitions are implemented; live GitHub/OIDC/AWS acceptance still
-requires a real account, repository, reviewed release SHA and protected environments.
+The platform and the three team repositories are published and their
+credential-free checks run on GitHub. No real AWS infrastructure has been
+provisioned: OIDC/AWS acceptance still requires a real account, registered
+identities and protected environments.
 
 ## What lives where
 
@@ -243,10 +244,20 @@ line if the consumer uses a different default branch. Both the shared workflow
 and CLI independently reject AWS execution from a non-default branch. GitHub
 must enforce environment branch restrictions before releasing OIDC credentials.
 
-An edit under `environments/dev/` plans dev only. Workflow/team-identity changes
-plan every configured environment. Documentation-only changes do not produce
-AWS plans. Every PR still checks every environment. New consumer environments
-are discovered dynamically; there is no hardcoded three-environment CI matrix.
+**Capability of the reusable workflow.** `scripts/consumer_matrix.py` classifies
+the change: an edit under `environments/dev/` selects dev only, a shared-file
+edit (`team.json`, `Makefile`, `.github/`) selects every configured environment,
+a documentation-only edit selects none, and removing an environment fails closed
+without an approved retirement receipt. That selection drives the `deploy` job's
+matrix, so a dispatched plan or apply touches only the selected environments.
+Environments are discovered dynamically; there is no hardcoded three-environment
+matrix.
+
+**What the published callers actually do.** They request `check` for every
+automatic trigger, so a push or pull request produces **no AWS plan at all**.
+The `check` job also validates *every* environment rather than only the selected
+ones — selection narrows deployment, not validation. Selective planning is
+therefore reachable only through a manual `mode=plan` or `mode=apply` dispatch.
 
 Each deployment job has repository/team/environment concurrency with
 `cancel-in-progress=false`, and Terraform uses DynamoDB locks with a bounded

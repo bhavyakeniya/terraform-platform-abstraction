@@ -63,8 +63,8 @@ The main platform workflow has a required `security` job, and its checks job
 requires that job. The reusable team workflow runs the same security composite
 inside its credential-free `check` job. Deployment requires `check`, so both plan
 and apply paths are gated. Bootstrap operators also run these commands before
-reviewing their bootstrap plan. Live GitHub execution remains unverified until
-publication; local workflow linting and scanner execution are verified separately.
+reviewing their bootstrap plan. Both scanners now execute on GitHub-hosted runners as well as locally; what
+remains unverified is AWS authorization, not the scanners running.
 
 The canaries run the actual scanner CLI in temporary source copies. They prove:
 

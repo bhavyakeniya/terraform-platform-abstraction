@@ -27,10 +27,21 @@ and named public-access approval, none of which exist yet. See
    changes, `1` error. Raw plans and state are private — never printed in
    full, never committed.
 4. A human reviews the saved plan for public exposure changes, IAM/trust
-   changes, deletion, replacement, and context changes. No automatic
-   destructive apply. Destructive changes require an explicit data-owner
+   changes, deletion, replacement, and context changes, then applies that
+   same reviewed plan. Destructive changes require an explicit data-owner
    retain/destroy decision. Human review is sufficient for this release —
    no approval database or workflow is built.
+
+> **The implemented workflow does not work this way, and the difference
+> matters.** `scripts/deploy.py` creates a fresh plan and applies that exact
+> plan inside the same job; there is no pause for anyone to read it. What a
+> `mode=apply` dispatch approves is **the configuration being deployed**, not
+> a specific reviewed plan. The only automatic brake is the destructive guard:
+> a plan that deletes or replaces resources is refused unless the dispatch
+> also set `allow-destroy`. To get a human-reviewed plan, dispatch `mode=plan`
+> first, read the summary, and only then dispatch `mode=apply` — accepting
+> that apply re-plans. The steps above describe the manual operator procedure
+> below, not the workflow.
 5. Apply the reviewed saved plan only while its source/context are still
    current. Any change to input, source, or state invalidates the plan and
    requires a fresh one. A missed or superseded CI event is retried with a
