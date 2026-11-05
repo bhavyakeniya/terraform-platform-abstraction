@@ -1,5 +1,7 @@
 # Terraform Platform Abstraction
 
+[![CI](https://github.com/bhavyakeniya/terraform-platform-abstraction/actions/workflows/terraform.yml/badge.svg?branch=main&event=push)](https://github.com/bhavyakeniya/terraform-platform-abstraction/actions/workflows/terraform.yml)
+
 A Terraform platform abstraction for a fintech infrastructure-platform team:
 one module provisions one team's S3 buckets and IAM role, one generic root
 runs that module against an isolated backend, and a small Python helper
