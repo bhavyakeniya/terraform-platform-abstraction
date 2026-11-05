@@ -34,9 +34,14 @@ direct consumer, not only the one Python helper that happens to exist today.
 
 ```
 bucket:    sumup--<environment>--<team-id>--<bucket-key>
-role:      tfp--<environment>--<team-id>--s3
+role:      <environment>--<team-id>--s3
 role path: /team-platform/runtime/<environment>/<team-id>/
 ```
+
+The bucket prefix exists because S3 names are globally unique; the role has no
+prefix because IAM names are account-scoped and the path already groups them.
+Environment and team stay in the role name regardless: AWS requires friendly
+names to be unique per account, and the path does not supply that uniqueness.
 
 Completed names are validated — length and the AWS reserved
 prefix/suffix list (`-s3alias`, `--ol-s3`, `--x-s3`, `--table-s3`, `-an`,

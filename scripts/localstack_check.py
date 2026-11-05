@@ -216,7 +216,7 @@ class ConsumerRun:
         names = self.names()
         outputs = json.loads(self.tf("output", "-json").stdout)
         require(outputs["bucket_names"]["value"] == names, "root bucket names/keys differ from declaration")
-        role = f"tfp--{self.context['environment']}--{self.team}--s3"
+        role = f"{self.context['environment']}--{self.team}--s3"
         tags = {"Team": self.team, "Environment": self.context["environment"], "Owner": self.declaration["owner"], "ManagedBy": "Terraform"}
         role_data = aws(self.env, "iam", "get-role", "--role-name", role)["Role"]
         require({t["Key"]: t["Value"] for t in role_data["Tags"]} == tags, "role tags differ")
@@ -485,7 +485,7 @@ def run_consumers(directories: list[Path], team_id: str | None = None, *, baseli
                         aws(env, "dynamodb", "delete-table", "--table-name", bucket)
                     require(not aws(env, "s3api", "list-buckets").get("Buckets"), "fixture backend buckets remain")
                     for consumer in consumers:
-                        role = f"tfp--{consumer.context['environment']}--{consumer.team}--s3"
+                        role = f"{consumer.context['environment']}--{consumer.team}--s3"
                         roles = aws(env, "iam", "list-roles").get("Roles", [])
                         require(role not in {r["RoleName"] for r in roles}, "workload role remains after destroy")
                     aws(env, "iam", "delete-role", "--role-name", "fixture-source")

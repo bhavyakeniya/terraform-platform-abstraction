@@ -8,7 +8,7 @@ locals {
     key => format("sumup--%s--%s--%s", var.environment, var.team_id, key)
   }
 
-  role_name = format("tfp--%s--%s--s3", var.environment, var.team_id)
+  role_name = format("%s--%s--s3", var.environment, var.team_id)
   role_path = format("/team-platform/runtime/%s/%s/", var.environment, var.team_id)
 
   tags = {

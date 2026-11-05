@@ -2,7 +2,7 @@ locals {
   suffix      = "${var.environment}--${var.team_id}"
   bucket      = "sumup--tfstate--${var.account_id}--${var.team_id}"
   state_key   = "workloads/${var.account_id}/${var.environment}/teams/${var.team_id}/terraform.tfstate"
-  runtime_arn = "arn:aws:iam::${var.account_id}:role/team-platform/runtime/${var.environment}/${var.team_id}/tfp--${local.suffix}--s3"
+  runtime_arn = "arn:aws:iam::${var.account_id}:role/team-platform/runtime/${var.environment}/${var.team_id}/${local.suffix}--s3"
   bucket_arn  = "arn:aws:s3:::sumup--${local.suffix}--*"
   tags        = { Team = var.team_id, Environment = var.environment, ManagedBy = "Terraform" }
 }

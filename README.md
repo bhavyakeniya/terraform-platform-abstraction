@@ -181,12 +181,21 @@ from one registry with no platform change.
 | Thing | Format | Example |
 | --- | --- | --- |
 | Bucket | `sumup--<env>--<team>--<key>` | `sumup--dev--payments--reports` |
-| Workload role | `tfp--<env>--<team>--s3` | `tfp--dev--payments--s3` |
+| Workload role | `<env>--<team>--s3` | `dev--payments--s3` |
 | State object | `workloads/<account>/<env>/teams/<team>/terraform.tfstate` | |
 | Backend bucket + lock table | `sumup--tfstate--<account>--<team>` | |
 
 `--` is an unambiguous separator because no identifier may contain it, so two
 different `(team, key)` splits can never produce the same name.
+
+**Only buckets carry the `sumup--` prefix.** S3 is a single global namespace, so
+the prefix reduces the chance of colliding with an unrelated account. IAM is
+account-scoped, so a role gains nothing from a company prefix; roles are grouped
+by their IAM path instead (`/team-platform/runtime/<env>/<team>/`), which is what
+an SCP or permissions boundary matches on. The role name still repeats
+environment and team because
+[AWS requires friendly names to be unique within an account](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html)
+and a path does not make two identically named roles distinct.
 
 - **No account ID in workload bucket names.** It stays in state keys, account
   guards and IAM resource-owner checks. Names are unique within the configured

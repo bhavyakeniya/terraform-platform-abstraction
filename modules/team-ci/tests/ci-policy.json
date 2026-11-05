@@ -84,7 +84,7 @@
         "iam:CreateRole",
         "iam:PutRolePermissionsBoundary"
       ],
-      "Resource": "arn:aws:iam::123456789012:role/team-platform/runtime/dev/payments/tfp--dev--payments--s3",
+      "Resource": "arn:aws:iam::123456789012:role/team-platform/runtime/dev/payments/dev--payments--s3",
       "Condition": {
         "StringEquals": {
           "iam:PermissionsBoundary": "arn:aws:iam::123456789012:policy/sumup-boundary--dev--payments"
@@ -110,13 +110,13 @@
         "iam:ListAttachedRolePolicies",
         "iam:ListInstanceProfilesForRole"
       ],
-      "Resource": "arn:aws:iam::123456789012:role/team-platform/runtime/dev/payments/tfp--dev--payments--s3"
+      "Resource": "arn:aws:iam::123456789012:role/team-platform/runtime/dev/payments/dev--payments--s3"
     },
     {
       "Sid": "ProtectBoundary",
       "Effect": "Deny",
       "Action": "iam:DeleteRolePermissionsBoundary",
-      "Resource": "arn:aws:iam::123456789012:role/team-platform/runtime/dev/payments/tfp--dev--payments--s3"
+      "Resource": "arn:aws:iam::123456789012:role/team-platform/runtime/dev/payments/dev--payments--s3"
     },
     {
       "Sid": "PrivateEmergencyState",

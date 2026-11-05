@@ -33,7 +33,7 @@ run "one_bucket_one_role" {
   }
 
   assert {
-    condition     = aws_iam_role.workload.name == "tfp--test--payments--s3"
+    condition     = aws_iam_role.workload.name == "test--payments--s3"
     error_message = "expected a single, deterministically named workload role"
   }
 }
@@ -55,7 +55,7 @@ run "three_buckets_still_one_role" {
   }
 
   assert {
-    condition     = aws_iam_role.workload.name == "tfp--test--payments--s3"
+    condition     = aws_iam_role.workload.name == "test--payments--s3"
     error_message = "role must stay the same single role regardless of bucket count"
   }
 }
